@@ -42,6 +42,13 @@ func TestAPIAndGUI(t *testing.T) {
 		t.Fatalf("POST /api/context status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
+	req = httptest.NewRequest(http.MethodPost, "/api/suggest", bytes.NewBufferString(`{"subject":"smoke","user_prompt":"Prefiro respostas diretas. Decidimos usar SQLite."}`))
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "candidates") || !strings.Contains(rec.Body.String(), "preference") {
+		t.Fatalf("POST /api/suggest status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, req)

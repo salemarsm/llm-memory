@@ -40,6 +40,19 @@ func main() {
 		var out memory.ContextResponse
 		post(*addr+"/api/context", memory.ContextRequest{Query: query, Subject: *subject, Scopes: scopes(*scope), MaxTokens: *maxTokens}, &out)
 		printJSONOrText(*jsonOut, out, func() { fmt.Println(out.Context) })
+	case "suggest":
+		prompt := strings.Join(flag.Args()[1:], " ")
+		if prompt == "" {
+			b, _ := io.ReadAll(os.Stdin)
+			prompt = strings.TrimSpace(string(b))
+		}
+		var out memory.SuggestResponse
+		post(*addr+"/api/suggest", memory.SuggestRequest{Subject: *subject, Scope: memory.Scope(*scope), UserPrompt: prompt, MaxCandidates: 5}, &out)
+		printJSONOrText(*jsonOut, out, func() {
+			for _, c := range out.Candidates {
+				fmt.Printf("[%s %.2f] %s\nreason: %s\n\n", c.Memory.Type, c.Memory.Confidence, c.Memory.Content, c.Reason)
+			}
+		})
 	case "remember":
 		content := strings.Join(flag.Args()[1:], " ")
 		if content == "" {
@@ -132,6 +145,7 @@ Commands:
   search <query>       search raw memories
   context <query>      print token-budgeted context for an agent prompt
   remember <content>   store a memory; reads stdin when content is empty
+  suggest <text>       suggest durable memories/learnings from text
   forget <id>          delete a memory
 
 Flags:

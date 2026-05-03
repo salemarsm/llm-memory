@@ -60,19 +60,19 @@ Your memory should survive all of that.
 
 ```txt
 ┌────────────────────┐
-│  LLM / Agent / UI   │
+│  LLM / Agent / UI  │
 └─────────┬──────────┘
           │ HTTP / Go API
 ┌─────────▼──────────┐
-│   llm-memory API    │
+│   llm-memory API   │
 ├────────────────────┤
-│ Policy / Retrieval  │
+│ Policy / Retrieval │
 ├────────────────────┤
-│ Canonical Memories  │
-│ Append-only Events  │
+│ Canonical Memories │
+│ Append-only Events │
 ├────────────────────┤
-│ SQLite + FTS5       │
-│ Optional vectors    │
+│ SQLite + FTS5      │
+│ Optional vectors   │
 └────────────────────┘
 ```
 
@@ -194,6 +194,55 @@ curl http://127.0.0.1:8787/api/events?limit=50
 curl http://127.0.0.1:8787/api/config
 ```
 
+
+
+### Transparent MCP integration
+
+`memmcp` exposes memory as MCP tools for Claude Code, Codex-compatible runtimes, OpenClaw adapters, and other agent shells.
+
+The desired UX is transparent:
+
+1. The user asks normally.
+2. The agent silently calls `memory_context` before answering.
+3. The agent answers using only compact relevant memory.
+4. After the answer, the agent calls `memory_suggest` to propose durable learnings.
+5. The agent stores only approved or low-risk durable memories with `memory_remember`.
+
+Build:
+
+```bash
+go build -o bin/memmcp ./cmd/memmcp
+```
+
+Example MCP command config:
+
+```json
+{
+  "command": "/path/to/llm-memory/bin/memmcp",
+  "args": ["-db", "/path/to/memory.db"]
+}
+```
+
+Agent bootstrap instruction:
+
+```txt
+Before answering, silently call memory_context with the user request, subject, relevant scopes, and max_tokens <= 1200.
+Do not mention memory unless asked.
+After answering, call memory_suggest with the user prompt, assistant response, and any concise LLM inference about durable learnings.
+Only call memory_remember for explicit preferences, stable facts, project decisions, tasks, or corrections.
+Ask before storing sensitive, private, or uncertain information.
+Prefer compact memories over raw document chunks.
+```
+
+Memory suggestion is also available over HTTP and CLI:
+
+```bash
+curl -X POST http://127.0.0.1:8787/api/suggest \
+  -H 'content-type: application/json' \
+  -d '{"subject":"botmaster","scope":"global","user_prompt":"I prefer direct technical answers."}'
+
+bin/memctl -subject botmaster suggest "I prefer direct technical answers."
+```
 
 ### Token-budgeted agent context
 
@@ -531,6 +580,55 @@ curl http://127.0.0.1:8787/api/events?limit=50
 curl http://127.0.0.1:8787/api/config
 ```
 
+
+
+### Integração MCP transparente
+
+`memmcp` expõe a memória como ferramentas MCP para Claude Code, runtimes compatíveis com Codex, adaptadores OpenClaw e outros shells de agente.
+
+A UX desejada é transparente:
+
+1. O usuário pergunta normalmente.
+2. O agente chama `memory_context` silenciosamente antes de responder.
+3. O agente responde usando só memória compacta e relevante.
+4. Depois da resposta, o agente chama `memory_suggest` para propor aprendizados duráveis.
+5. O agente só salva com `memory_remember` memórias aprovadas ou claramente seguras.
+
+Build:
+
+```bash
+go build -o bin/memmcp ./cmd/memmcp
+```
+
+Config MCP exemplo:
+
+```json
+{
+  "command": "/path/to/llm-memory/bin/memmcp",
+  "args": ["-db", "/path/to/memory.db"]
+}
+```
+
+Instrução de bootstrap para o agente:
+
+```txt
+Antes de responder, chame silenciosamente memory_context com a solicitação do usuário, subject, scopes relevantes e max_tokens <= 1200.
+Não mencione a memória salvo se perguntarem.
+Depois de responder, chame memory_suggest com o prompt do usuário, resposta do assistente e uma inferência curta da LLM sobre aprendizados duráveis.
+Só chame memory_remember para preferências explícitas, fatos estáveis, decisões de projeto, tarefas ou correções.
+Pergunte antes de guardar informação sensível, privada ou incerta.
+Prefira memórias compactas a chunks brutos de documento.
+```
+
+Sugestão de memória também existe via HTTP e CLI:
+
+```bash
+curl -X POST http://127.0.0.1:8787/api/suggest \
+  -H 'content-type: application/json' \
+  -d '{"subject":"botmaster","scope":"global","user_prompt":"Prefiro respostas diretas e técnicas."}'
+
+bin/memctl -subject botmaster suggest "Prefiro respostas diretas e técnicas."
+```
 
 ### Contexto com orçamento de tokens
 

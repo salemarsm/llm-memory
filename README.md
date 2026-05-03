@@ -52,7 +52,7 @@ Implemented today:
 
 Planned / not production-ready yet:
 
-- API token / local auth
+- API token / local auth ([P0 backlog](docs/backlog.md))
 - Docling ingestion command
 - hybrid vector ranking
 - full contradiction resolution policy
@@ -445,6 +445,7 @@ Keep project-specific knowledge compartmentalized per tool, target, client, or e
 - [RAG pipeline](docs/rag-pipeline.md)
 - [Security](docs/security.md)
 - [Roadmap](docs/roadmap.md)
+- [Backlog](docs/backlog.md)
 
 ## License
 

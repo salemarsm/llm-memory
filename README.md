@@ -196,6 +196,47 @@ curl http://127.0.0.1:8787/api/config
 
 
 
+
+### One-command local setup
+
+Build the user-facing binaries:
+
+```bash
+go build -o bin/llm-memory ./cmd/llm-memory
+go build -o bin/memserver ./cmd/memserver
+go build -o bin/memmcp ./cmd/memmcp
+go build -o bin/memctl ./cmd/memctl
+```
+
+Initialize local state:
+
+```bash
+bin/llm-memory init
+bin/llm-memory doctor
+```
+
+Run the GUI/API with the generated config:
+
+```bash
+bin/llm-memory ui
+```
+
+Print an MCP config snippet:
+
+```bash
+bin/llm-memory mcp-config
+```
+
+Generate target-specific MCP snippets:
+
+```bash
+bin/llm-memory install-mcp claude-code
+bin/llm-memory install-mcp codex
+bin/llm-memory install-mcp openclaw
+```
+
+This writes snippets under `~/.llm-memory/` and prints the agent bootstrap instruction for transparent memory usage.
+
 ### Transparent MCP integration
 
 `memmcp` exposes memory as MCP tools for Claude Code, Codex-compatible runtimes, OpenClaw adapters, and other agent shells.
@@ -581,6 +622,47 @@ curl http://127.0.0.1:8787/api/config
 ```
 
 
+
+
+### Setup local em poucos comandos
+
+Build dos binários principais:
+
+```bash
+go build -o bin/llm-memory ./cmd/llm-memory
+go build -o bin/memserver ./cmd/memserver
+go build -o bin/memmcp ./cmd/memmcp
+go build -o bin/memctl ./cmd/memctl
+```
+
+Inicializar estado local:
+
+```bash
+bin/llm-memory init
+bin/llm-memory doctor
+```
+
+Rodar GUI/API com a config gerada:
+
+```bash
+bin/llm-memory ui
+```
+
+Imprimir config MCP:
+
+```bash
+bin/llm-memory mcp-config
+```
+
+Gerar snippets por alvo:
+
+```bash
+bin/llm-memory install-mcp claude-code
+bin/llm-memory install-mcp codex
+bin/llm-memory install-mcp openclaw
+```
+
+Isso escreve snippets em `~/.llm-memory/` e imprime a instrução de bootstrap para uso transparente da memória.
 
 ### Integração MCP transparente
 

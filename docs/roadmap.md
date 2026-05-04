@@ -143,11 +143,13 @@ Goal: improve trust, auditability, and correctness of stored memory.
 - soft delete vs hard delete semantics
 - audit UI for memory creation/supersession/deletion
 - table-first memory health UI with usage counters; no graph/Neo4j dependency
+- read-only GUI config/settings tab showing effective server, database, LLM, embedding, auth mode, and version metadata
 
 ### Should have
 
 - per-scope write policies
 - per-subject retention settings
+- safe GUI config editing for selected local settings, with validation and explicit restart/apply guidance
 - memory quality scoring
 - duplicate/near-duplicate detection
 - explanation traces for rejected suggestions

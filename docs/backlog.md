@@ -164,6 +164,17 @@ Acceptance:
 
 - User can judge memory health: zombie memories, hot memories, low-confidence memories, and stale tasks without leaving the embedded GUI.
 
+
+### UX-002 — GUI config/settings tab
+
+- Add a read-only settings tab showing effective server, database, LLM, embedding, auth mode, and version metadata.
+- Redact secrets and env var values; show only whether auth/token env is configured.
+- Later, allow safe editing for selected local settings with validation and explicit restart/apply guidance.
+
+Acceptance:
+
+- User can inspect runtime configuration from the GUI without opening config files or leaking secrets.
+
 ### UX-001 — Memory approval queue
 
 - Add pending candidate table or status.

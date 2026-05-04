@@ -463,3 +463,9 @@ Acceptance:
 - [x] Auto-detect project from `.llm-memory/config.json`, git remote, then directory basename.
 - [ ] Add variant detection warnings for similar project names.
 - [ ] Add ergonomic CLI wrappers for session lifecycle.
+
+## Privacy primitive
+
+- [x] Strip `<private>...</private>` blocks before canonical memory persistence.
+- [x] Enforce at store layer and API/MCP ingress for memory writes/supersession.
+- [ ] Add GUI affordance to show when a write was redacted without revealing stripped content.

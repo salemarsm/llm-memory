@@ -128,6 +128,7 @@ func (s *mcpServer) callTool(call toolCall) (string, error) {
 		if err := json.Unmarshal(call.Arguments, &m); err != nil {
 			return "", err
 		}
+		m.Content = memory.StripPrivateTags(m.Content)
 		if m.Source.Kind == "" {
 			m.Source = memory.Source{Kind: "mcp", Ref: "memory_remember"}
 		}

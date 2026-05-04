@@ -97,3 +97,23 @@ Sessions add narrative continuity for coding agents. They are project-scoped and
 - `POST /api/context` accepts optional `project`; when present it auto-starts an active session and includes the latest closed session summary within the token budget.
 
 MCP exposes the same primitives as `memory_session_start`, `memory_session_end`, and `memory_session_summary`. In `memmcp`, omitted project/subject fields default to auto-detected project identity from `.llm-memory/config.json`, git remote, or directory basename.
+
+## Privacy tags
+
+All write paths strip content wrapped in `<private>...</private>` before persistence. This is enforced at the store layer and also at API/MCP ingress for memory writes and supersession.
+
+Example:
+
+```json
+{
+  "content": "Use the staging DB. <private>actual password is ...</private> Never commit credentials."
+}
+```
+
+The stored canonical memory becomes:
+
+```txt
+Use the staging DB. Never commit credentials.
+```
+
+If stripping private blocks leaves empty content, the memory write is rejected by normal validation. Private blocks are not a substitute for secret storage; they are a redaction primitive for agents before canonical memory is saved.

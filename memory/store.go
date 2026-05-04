@@ -169,6 +169,7 @@ func (s *Store) AppendEvent(ctx context.Context, e Event) error {
 }
 
 func (s *Store) UpsertMemory(ctx context.Context, m Memory) (Memory, error) {
+	m.Content = StripPrivateTags(m.Content)
 	if err := validateMemory(m); err != nil {
 		return Memory{}, err
 	}
@@ -185,6 +186,7 @@ func (s *Store) UpsertMemory(ctx context.Context, m Memory) (Memory, error) {
 }
 
 func prepareMemoryForWrite(m Memory, supersedes *string) Memory {
+	m.Content = StripPrivateTags(m.Content)
 	if m.ID == "" {
 		m.ID = newID("mem")
 	}
@@ -345,6 +347,7 @@ func (s *Store) SearchRanked(ctx context.Context, q Query) ([]RankedMemory, erro
 }
 
 func (s *Store) Supersede(ctx context.Context, oldID string, newer Memory) (Memory, error) {
+	newer.Content = StripPrivateTags(newer.Content)
 	if err := validateMemory(newer); err != nil {
 		return Memory{}, err
 	}

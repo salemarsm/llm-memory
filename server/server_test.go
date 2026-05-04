@@ -189,3 +189,23 @@ func TestSessionAPIAndContext(t *testing.T) {
 		t.Fatalf("expected session summary in context: %s", rec.Body.String())
 	}
 }
+
+func TestAPIUpsertStripsPrivateTags(t *testing.T) {
+	store, err := memory.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	h := New(store, config.Default()).Handler()
+
+	body := `{"type":"fact","subject":"privacy","content":"visible <private>secret</private> fact","source":{"kind":"test","ref":"privacy"},"scope":"project","confidence":0.9}`
+	req := httptest.NewRequest(http.MethodPost, "/api/memories", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/memories status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "secret") || !strings.Contains(rec.Body.String(), "visible fact") {
+		t.Fatalf("private content leaked or public content missing: %s", rec.Body.String())
+	}
+}

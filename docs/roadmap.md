@@ -291,3 +291,8 @@ Goal: stable API and schema guarantees for local agent memory.
 - Added session start/end/summary API and MCP tools.
 - `memory_context` can include current session and latest closed session summary when `project` is supplied.
 - `memmcp` now auto-detects project identity when project/subject are omitted.
+
+### v0.2 privacy primitive — started
+
+- `<private>...</private>` blocks are stripped before memory persistence at store and API/MCP ingress.
+- Fully private memories are rejected after redaction by existing content validation.

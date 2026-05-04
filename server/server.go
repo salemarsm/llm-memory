@@ -265,6 +265,7 @@ func (s *Server) handleUpsertMemory(w http.ResponseWriter, r *http.Request) {
 		writeErrorStatus(w, http.StatusBadRequest, err)
 		return
 	}
+	m.Content = memory.StripPrivateTags(m.Content)
 	created, err := s.store.UpsertMemory(r.Context(), m)
 	if err != nil {
 		writeErrorStatus(w, http.StatusBadRequest, err)
@@ -299,6 +300,7 @@ func (s *Server) handleSupersede(w http.ResponseWriter, r *http.Request) {
 		writeErrorStatus(w, http.StatusBadRequest, err)
 		return
 	}
+	m.Content = memory.StripPrivateTags(m.Content)
 	created, err := s.store.Supersede(r.Context(), r.PathValue("id"), m)
 	if err != nil {
 		writeError(w, err)

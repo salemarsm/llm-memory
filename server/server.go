@@ -36,6 +36,7 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("DELETE "+prefix+"/memories/{id}", s.handleForget)
 		s.mux.HandleFunc("POST "+prefix+"/search", s.handleSearchPOST)
 		s.mux.HandleFunc("POST "+prefix+"/context", s.handleContext)
+		s.mux.HandleFunc("POST "+prefix+"/feedback", s.handleFeedback)
 		s.mux.HandleFunc("POST "+prefix+"/suggest", s.handleSuggest)
 		s.mux.HandleFunc("POST "+prefix+"/supersede/{id}", s.handleSupersede)
 		s.mux.HandleFunc("GET "+prefix+"/events", s.handleEvents)
@@ -101,6 +102,22 @@ func (s *Server) handleContext(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
+	var req memory.ContextFeedback
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorStatus(w, http.StatusBadRequest, err)
+		return
+	}
+	if req.Source.Kind == "" {
+		req.Source = memory.Source{Kind: "api", Ref: r.RemoteAddr}
+	}
+	if err := s.store.RecordContextFeedback(r.Context(), req); err != nil {
+		writeErrorStatus(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "context_id": req.ContextID})
 }
 
 func (s *Server) handleSuggest(w http.ResponseWriter, r *http.Request) {

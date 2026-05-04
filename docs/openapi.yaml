@@ -34,6 +34,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ContextResponse'
+  /api/feedback:
+    post:
+      summary: Record feedback for a context response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContextFeedback'
+      responses:
+        '200':
+          description: Feedback recorded
   /api/suggest:
     post:
       summary: Suggest durable memories/learnings from prompts and model output
@@ -237,6 +249,7 @@ components:
     ContextResponse:
       type: object
       properties:
+        context_id: { type: string }
         context: { type: string }
         items:
           type: array
@@ -245,6 +258,17 @@ components:
         estimated_tokens: { type: integer }
         budget_tokens: { type: integer }
         truncated: { type: boolean }
+    ContextFeedback:
+      type: object
+      required: [context_id, useful]
+      properties:
+        context_id: { type: string }
+        useful: { type: boolean }
+        memory_ids_used:
+          type: array
+          items: { type: string }
+        source:
+          $ref: '#/components/schemas/Source'
     SuggestRequest:
       type: object
       properties:

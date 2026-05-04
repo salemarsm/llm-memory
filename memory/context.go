@@ -2,8 +2,10 @@ package memory
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 const defaultContextTokenBudget = 1200
@@ -19,6 +21,7 @@ type ContextRequest struct {
 }
 
 type ContextResponse struct {
+	ContextID       string   `json:"context_id"`
 	Context         string   `json:"context"`
 	Items           []Memory `json:"items"`
 	EstimatedTokens int      `json:"estimated_tokens"`
@@ -53,12 +56,24 @@ func (s *Store) BuildContext(ctx context.Context, req ContextRequest) (ContextRe
 	if err != nil {
 		return ContextResponse{}, err
 	}
+	if len(items) == 0 && strings.TrimSpace(req.Query) != "" && req.Subject != "" {
+		// FTS is candidate generation, not truth. Conversational prompts can miss
+		// durable subject memories entirely, so fall back to high-confidence active
+		// subject memories and let budget/type/scope filters keep context compact.
+		items, err = s.Search(ctx, Query{Types: req.Types, Scopes: req.Scopes, Subject: req.Subject, Tags: req.Tags, Limit: limit})
+		if err != nil {
+			return ContextResponse{}, err
+		}
+	}
 
 	var b strings.Builder
 	used := 0
 	selected := make([]Memory, 0, len(items))
 	truncated := false
 	for _, m := range items {
+		if m.Confidence < 0.5 {
+			continue
+		}
 		line := formatContextMemory(m)
 		cost := EstimateTokens(line)
 		if used+cost > budget {
@@ -71,13 +86,34 @@ func (s *Store) BuildContext(ctx context.Context, req ContextRequest) (ContextRe
 		selected = append(selected, m)
 	}
 
+	contextID := newID("ctx")
+	payload, _ := json.Marshal(map[string]any{
+		"context_id":       contextID,
+		"query":            req.Query,
+		"subject":          req.Subject,
+		"memory_ids":       memoryIDs(selected),
+		"estimated_tokens": used,
+		"budget_tokens":    budget,
+		"truncated":        truncated,
+	})
+	_ = s.AppendEvent(ctx, Event{Kind: "context.built", Payload: string(payload), Source: Source{Kind: "retrieval", Ref: "BuildContext"}, CreatedAt: time.Now().UTC()})
+
 	return ContextResponse{
+		ContextID:       contextID,
 		Context:         strings.TrimSpace(b.String()),
 		Items:           selected,
 		EstimatedTokens: used,
 		BudgetTokens:    budget,
 		Truncated:       truncated,
 	}, nil
+}
+
+func memoryIDs(items []Memory) []string {
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	return ids
 }
 
 func formatContextMemory(m Memory) string {

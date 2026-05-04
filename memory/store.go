@@ -56,6 +56,16 @@ func (s *Store) Migrate(ctx context.Context) error {
 			source_ref TEXT NOT NULL,
 			created_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS context_feedback (
+			id TEXT PRIMARY KEY,
+			context_id TEXT NOT NULL,
+			useful INTEGER NOT NULL CHECK(useful IN (0, 1)),
+			memory_ids_json TEXT NOT NULL DEFAULT '[]',
+			source_kind TEXT NOT NULL,
+			source_ref TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_context_feedback_context ON context_feedback(context_id, created_at DESC);`,
 		`ALTER TABLE events ADD COLUMN memory_id TEXT;`,
 		`CREATE TABLE IF NOT EXISTS memories (
 			id TEXT PRIMARY KEY,
@@ -246,10 +256,15 @@ func (s *Store) Search(ctx context.Context, q Query) ([]Memory, error) {
 	where := []string{"m.superseded_by IS NULL"}
 	args := []any{}
 	join := ""
+	orderBy := "m.updated_at DESC"
 	if strings.TrimSpace(q.Text) != "" {
-		join = "JOIN memories_fts ON memories_fts.id = m.id"
-		where = append(where, "memories_fts MATCH ?")
-		args = append(args, q.Text)
+		fts := ftsQuery(q.Text)
+		if fts != "" {
+			join = "JOIN memories_fts ON memories_fts.id = m.id"
+			where = append(where, "memories_fts MATCH ?")
+			args = append(args, fts)
+			orderBy = "bm25(memories_fts) ASC, m.confidence DESC, m.updated_at DESC"
+		}
 	}
 	if q.Subject != "" {
 		where = append(where, "m.subject = ?")
@@ -273,7 +288,7 @@ func (s *Store) Search(ctx context.Context, q Query) ([]Memory, error) {
 	}
 	args = append(args, limit)
 
-	sqlq := fmt.Sprintf(`SELECT m.id, m.type, m.subject, m.content, m.source_kind, m.source_ref, m.scope, m.confidence, m.created_at, m.updated_at, m.valid_from, m.valid_until, m.supersedes_id, m.superseded_by, m.tags_json, m.embedding_refs_json FROM memories m %s WHERE %s ORDER BY m.updated_at DESC LIMIT ?`, join, strings.Join(where, " AND "))
+	sqlq := fmt.Sprintf(`SELECT m.id, m.type, m.subject, m.content, m.source_kind, m.source_ref, m.scope, m.confidence, m.created_at, m.updated_at, m.valid_from, m.valid_until, m.supersedes_id, m.superseded_by, m.tags_json, m.embedding_refs_json FROM memories m %s WHERE %s ORDER BY %s LIMIT ?`, join, strings.Join(where, " AND "), orderBy)
 	rows, err := s.db.QueryContext(ctx, sqlq, args...)
 	if err != nil {
 		return nil, err

@@ -27,6 +27,8 @@ These came from early code review feedback and are already implemented after `v0
 - GoReleaser release scaffolding.
 - Version metadata command/flags with ldflags support.
 - Makefile for build/test/check/install/snapshot.
+- Retrieval baseline tests for BM25 ranking, FTS-miss fallback, and feedback events.
+- `POST /api/feedback` plus `context_id` in context responses.
 
 
 ## P0 — Safety, correctness, and release hygiene
@@ -205,7 +207,9 @@ Acceptance:
 
 ### RET-001 — Ranking formula
 
+- BM25-backed FTS ranking exists as first retrieval upgrade.
 - Combine FTS rank, scope priority, confidence, recency, and type weights.
+- Add RRF-style fusion once multiple candidate generators exist.
 - Document formula.
 
 Acceptance:
@@ -242,15 +246,17 @@ Acceptance:
 
 - Repeated context calls are cheap.
 
-### RET-004 — Benchmarks
+### RET-004 — Benchmarks and retrieval eval
 
 - Add synthetic corpus generator.
+- Expand retrieval eval fixtures with annotated expected top-k prompts.
+- Measure precision@5 / nDCG@10 for retrieval changes.
 - Measure search latency at 1k/10k/100k memories.
 - Measure context build latency.
 
 Acceptance:
 
-- README can include honest benchmark numbers.
+- README can include honest benchmark numbers and retrieval-quality baseline numbers.
 
 ## P2 — Governance
 

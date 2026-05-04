@@ -190,6 +190,9 @@ Goal: make context retrieval high-signal and cheap.
 ### Must have
 
 - ranking formula combining FTS, scope, confidence, recency, and type
+- retrieval evaluation harness with precision/nDCG-style fixtures [started post-alpha]
+- BM25-backed FTS candidate ranking [started post-alpha]
+- `context_id` and feedback capture endpoint [started post-alpha]
 - token budget allocator by category
 - supersession-aware retrieval
 - context cache keyed by query/scope/version

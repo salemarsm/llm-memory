@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -163,4 +164,62 @@ func nullableEmptyTime(s string) any {
 		return nil
 	}
 	return s
+}
+
+func (s *Store) SearchChunks(ctx context.Context, req ChunkSearchRequest) ([]ChunkSearchResult, error) {
+	limit := req.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	where := []string{"1=1"}
+	args := []any{}
+	join := ""
+	orderBy := "c.created_at DESC, c.ordinal ASC"
+	if fts := ftsQuery(req.Text); fts != "" {
+		join = "JOIN chunks_fts ON chunks_fts.id = c.id"
+		where = append(where, "chunks_fts MATCH ?")
+		args = append(args, fts)
+		orderBy = "bm25(chunks_fts) ASC, c.ordinal ASC"
+	}
+	if req.DocumentID != "" {
+		where = append(where, "c.document_id = ?")
+		args = append(args, req.DocumentID)
+	}
+	args = append(args, limit)
+	query := `SELECT c.id, c.document_id, c.ordinal, c.heading_path, c.content, c.token_count, c.page_from, c.page_to, c.embedding_refs_json, c.created_at,
+		d.id, d.path, d.title, d.source_kind, d.source_ref, d.sha256, d.created_at`
+	if join != "" {
+		query += `, bm25(chunks_fts)`
+	} else {
+		query += `, 0.0`
+	}
+	query += ` FROM chunks c ` + join + ` JOIN documents d ON d.id = c.document_id WHERE ` + strings.Join(where, " AND ") + ` ORDER BY ` + orderBy + ` LIMIT ?`
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ChunkSearchResult
+	for rows.Next() {
+		var r ChunkSearchResult
+		var pageFrom, pageTo sql.NullInt64
+		var embeds, chunkCreated, docCreated string
+		if err := rows.Scan(&r.Chunk.ID, &r.Chunk.DocumentID, &r.Chunk.Ordinal, &r.Chunk.HeadingPath, &r.Chunk.Content, &r.Chunk.TokenCount, &pageFrom, &pageTo, &embeds, &chunkCreated,
+			&r.Document.ID, &r.Document.Path, &r.Document.Title, &r.Document.SourceKind, &r.Document.SourceRef, &r.Document.SHA256, &docCreated, &r.Score); err != nil {
+			return nil, err
+		}
+		if pageFrom.Valid {
+			v := int(pageFrom.Int64)
+			r.Chunk.PageFrom = &v
+		}
+		if pageTo.Valid {
+			v := int(pageTo.Int64)
+			r.Chunk.PageTo = &v
+		}
+		_ = json.Unmarshal([]byte(embeds), &r.Chunk.EmbeddingRefs)
+		r.Chunk.CreatedAt, _ = parseTime(chunkCreated)
+		r.Document.CreatedAt, _ = parseTime(docCreated)
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }

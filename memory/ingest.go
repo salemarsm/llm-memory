@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -55,7 +56,7 @@ func (s *Store) IngestPath(ctx context.Context, req IngestRequest) (IngestRespon
 	if err != nil {
 		return IngestResponse{}, err
 	}
-	run := IngestionRun{ID: newID("ing"), SourcePath: abs, Recursive: req.Recursive, Parser: "native-text", Status: "running", CreatedAt: time.Now().UTC()}
+	run := IngestionRun{ID: newID("ing"), SourcePath: abs, Recursive: req.Recursive, Parser: ingestParserLabel(), Status: "running", CreatedAt: time.Now().UTC()}
 	if err := s.UpsertIngestionRun(ctx, run); err != nil {
 		return IngestResponse{}, err
 	}
@@ -82,11 +83,18 @@ func (s *Store) IngestPath(ctx context.Context, req IngestRequest) (IngestRespon
 		return finish("error", err)
 	}
 	for _, file := range files {
-		if !isTextIngestFile(file) {
-			resp.Skipped = append(resp.Skipped, file+" (unsupported; Docling adapter pending)")
+		var doc Document
+		var chunks []Chunk
+		var err error
+		switch {
+		case isTextIngestFile(file):
+			doc, chunks, err = s.ingestTextFile(ctx, run.ID, file)
+		case isDoclingIngestFile(file):
+			doc, chunks, err = s.ingestDoclingFile(ctx, run.ID, file)
+		default:
+			resp.Skipped = append(resp.Skipped, file+" (unsupported extension)")
 			continue
 		}
-		doc, chunks, err := s.ingestTextFile(ctx, run.ID, file)
 		if err != nil {
 			resp.Skipped = append(resp.Skipped, file+" ("+err.Error()+")")
 			continue
@@ -95,7 +103,7 @@ func (s *Store) IngestPath(ctx context.Context, req IngestRequest) (IngestRespon
 		resp.Chunks = append(resp.Chunks, chunks...)
 	}
 	status := "ok"
-	if len(resp.Documents) == 0 && len(resp.Skipped) > 0 {
+	if len(resp.Skipped) > 0 {
 		status = "partial"
 	}
 	return finish(status, nil)
@@ -142,6 +150,34 @@ func ingestFileList(path string, recursive bool) ([]string, error) {
 
 func isTextIngestFile(path string) bool { return textIngestExts[strings.ToLower(filepath.Ext(path))] }
 
+var doclingIngestExts = map[string]bool{
+	".pdf": true, ".docx": true, ".pptx": true, ".xlsx": true,
+	".png": true, ".jpg": true, ".jpeg": true, ".tif": true, ".tiff": true,
+}
+
+func isDoclingIngestFile(path string) bool {
+	return doclingIngestExts[strings.ToLower(filepath.Ext(path))]
+}
+
+func ingestParserLabel() string {
+	if p, err := exec.LookPath("docling"); err == nil {
+		version := strings.TrimSpace(string(mustCommandOutput("docling", "--version")))
+		if version != "" {
+			return "native-text+docling-cli:" + version
+		}
+		return "native-text+docling-cli:" + p
+	}
+	return "native-text"
+}
+
+func mustCommandOutput(name string, args ...string) []byte {
+	out, err := exec.Command(name, args...).CombinedOutput()
+	if err != nil {
+		return nil
+	}
+	return out
+}
+
 func (s *Store) ingestTextFile(ctx context.Context, runID, path string) (Document, []Chunk, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -158,7 +194,7 @@ func (s *Store) ingestTextFile(ctx context.Context, runID, path string) (Documen
 	if err != nil {
 		return Document{}, nil, err
 	}
-	if err := s.ReplaceDocumentChunks(ctx, doc.ID, splitChunks(text, 1800)); err != nil {
+	if err := s.ReplaceDocumentChunks(ctx, doc.ID, splitMarkdownChunks(text, 1800)); err != nil {
 		return Document{}, nil, err
 	}
 	chunks, err := s.ListChunks(ctx, doc.ID)
@@ -168,7 +204,80 @@ func (s *Store) ingestTextFile(ctx context.Context, runID, path string) (Documen
 	return doc, chunks, nil
 }
 
-func splitChunks(text string, maxRunes int) []string {
+func (s *Store) ingestDoclingFile(ctx context.Context, runID, path string) (Document, []Chunk, error) {
+	if _, err := exec.LookPath("docling"); err != nil {
+		return Document{}, nil, errors.New("docling CLI not found in PATH")
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return Document{}, nil, err
+	}
+	sum := sha256.Sum256(b)
+	hash := hex.EncodeToString(sum[:])
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	tmp, err := os.MkdirTemp("", "llm-memory-docling-*")
+	if err != nil {
+		return Document{}, nil, err
+	}
+	defer os.RemoveAll(tmp)
+	cmd := exec.CommandContext(ctx, "docling", "--to", "md", "--output", tmp, path)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			msg = err.Error()
+		}
+		return Document{}, nil, fmt.Errorf("docling conversion failed: %s", msg)
+	}
+	md, err := readDoclingMarkdown(tmp)
+	if err != nil {
+		return Document{}, nil, err
+	}
+	text := strings.TrimSpace(md)
+	if text == "" {
+		return Document{}, nil, errors.New("docling produced empty markdown")
+	}
+	doc := Document{ID: "doc_" + hash[:32], Path: path, Title: filepath.Base(path), SourceKind: "file:docling", SourceRef: path, SHA256: hash}
+	doc, err = s.UpsertDocument(ctx, doc)
+	if err != nil {
+		return Document{}, nil, err
+	}
+	if err := s.ReplaceDocumentChunks(ctx, doc.ID, splitMarkdownChunks(text, 1800)); err != nil {
+		return Document{}, nil, err
+	}
+	chunks, err := s.ListChunks(ctx, doc.ID)
+	if err != nil {
+		return Document{}, nil, err
+	}
+	return doc, chunks, nil
+}
+
+func readDoclingMarkdown(dir string) (string, error) {
+	var candidates []string
+	if err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.EqualFold(filepath.Ext(p), ".md") {
+			candidates = append(candidates, p)
+		}
+		return nil
+	}); err != nil {
+		return "", err
+	}
+	if len(candidates) == 0 {
+		return "", errors.New("docling produced no markdown output")
+	}
+	sort.Strings(candidates)
+	b, err := os.ReadFile(candidates[0])
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func splitMarkdownChunks(text string, maxRunes int) []string {
 	parts := strings.Split(text, "\n\n")
 	var out []string
 	var cur strings.Builder

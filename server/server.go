@@ -70,6 +70,7 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("GET "+prefix+"/events", s.handleEvents)
 		s.mux.HandleFunc("GET "+prefix+"/documents", s.handleDocuments)
 		s.mux.HandleFunc("POST "+prefix+"/ingest", s.handleIngest)
+		s.mux.HandleFunc("POST "+prefix+"/chunks/search", s.handleChunkSearch)
 	}
 }
 
@@ -231,6 +232,20 @@ func (s *Server) handleSupersede(w http.ResponseWriter, r *http.Request) {
 	}
 	s.appendEvent(r, memory.Event{Kind: "memory.superseded", Payload: r.PathValue("id") + " -> " + created.ID, Source: memory.Source{Kind: "api", Ref: r.RemoteAddr}})
 	writeJSON(w, http.StatusOK, created)
+}
+
+func (s *Server) handleChunkSearch(w http.ResponseWriter, r *http.Request) {
+	var req memory.ChunkSearchRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorStatus(w, http.StatusBadRequest, err)
+		return
+	}
+	items, err := s.store.SearchChunks(r.Context(), req)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
 }
 
 func (s *Server) handleDocuments(w http.ResponseWriter, r *http.Request) {

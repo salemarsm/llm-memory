@@ -206,6 +206,24 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Event'
+  /api/chunks/search:
+    post:
+      summary: Search RAG chunks/evidence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChunkSearchRequest'
+      responses:
+        '200':
+          description: Matching chunks with document provenance
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChunkSearchResult'
   /api/ingest:
     post:
       summary: Ingest a file or directory into RAG documents/chunks
@@ -252,6 +270,20 @@ components:
       required: true
       schema: { type: string }
   schemas:
+    ChunkSearchRequest:
+      type: object
+      properties:
+        text: { type: string }
+        document_id: { type: string }
+        limit: { type: integer, default: 20 }
+    ChunkSearchResult:
+      type: object
+      properties:
+        chunk:
+          $ref: '#/components/schemas/Chunk'
+        document:
+          $ref: '#/components/schemas/Document'
+        score: { type: number }
     IngestRequest:
       type: object
       required: [path]

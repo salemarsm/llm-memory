@@ -24,3 +24,15 @@ type Chunk struct {
 	EmbeddingRefs EmbeddingRefs `json:"embedding_refs"`
 	CreatedAt     time.Time     `json:"created_at"`
 }
+
+type ChunkSearchRequest struct {
+	Text       string `json:"text"`
+	DocumentID string `json:"document_id"`
+	Limit      int    `json:"limit"`
+}
+
+type ChunkSearchResult struct {
+	Chunk    Chunk    `json:"chunk"`
+	Document Document `json:"document"`
+	Score    float64  `json:"score"`
+}

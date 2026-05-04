@@ -60,6 +60,15 @@ func main() {
 				fmt.Printf("[%s %.2f] %s\nreason: %s\n\n", c.Memory.Type, c.Memory.Confidence, c.Memory.Content, c.Reason)
 			}
 		})
+	case "chunks":
+		query := strings.Join(flag.Args()[1:], " ")
+		var out []memory.ChunkSearchResult
+		post(*addr+"/api/chunks/search", memory.ChunkSearchRequest{Text: query, Limit: 20}, &out)
+		printJSONOrText(*jsonOut, out, func() {
+			for _, r := range out {
+				fmt.Printf("%s %s [%s] %.3f\n%s\n\n", r.Chunk.ID, r.Document.Title, r.Document.Path, r.Score, r.Chunk.Content)
+			}
+		})
 	case "ingest":
 		if flag.NArg() < 2 {
 			log.Fatal("ingest requires file or directory path")
@@ -165,6 +174,7 @@ Commands:
   context <query>      print token-budgeted context for an agent prompt
   remember <content>   store a memory; reads stdin when content is empty
   ingest <path>        ingest a file or directory recursively into RAG documents/chunks
+  chunks <query>       search RAG chunks/evidence
   suggest <text>       suggest durable memories/learnings from text
   forget <id>          delete a memory
 

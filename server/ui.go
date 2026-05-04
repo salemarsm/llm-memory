@@ -45,7 +45,7 @@ const indexHTML = `<!doctype html>
       <div style="flex:0 0 160px"><label><input id="ingestRecursive" type="checkbox" checked style="width:auto"/> recursivo</label></div>
       <div style="flex:0 0 120px"><button onclick="ingestPath()">Ingerir</button></div>
     </div>
-    <p class="muted" id="ingestMsg">Arquivos texto/markdown/html/json/csv/tex entram agora; PDF/DOCX ficam rastreados como pendentes do adapter Docling.</p>
+    <p class="muted" id="ingestMsg">Texto/markdown/html/json/csv/tex entram nativo; PDF/DOCX/PPTX/XLSX/imagens usam Docling CLI se instalado.</p>
   </section>
 
   <main class="card" style="overflow:auto;max-height:70vh">

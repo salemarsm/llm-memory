@@ -189,13 +189,13 @@ Acceptance:
 
 ### RAG-001 — Chunk search API
 
-- Add `POST /api/chunks/search`.
-- Search `chunks_fts`.
-- Return document/chunk metadata.
+- Add `POST /api/chunks/search`. [implemented]
+- Search `chunks_fts`. [implemented]
+- Return document/chunk metadata. [implemented]
 
 Acceptance:
 
-- Imported or manually inserted chunks can be searched separately from memories.
+- Imported or manually inserted chunks can be searched separately from memories. [implemented]
 
 ### RAG-002 — Document/chunk GUI views
 
@@ -221,10 +221,10 @@ Acceptance:
 
 ### RAG-004 — GUI Docling ingestion flow
 
-- Add GUI upload/select flow for Docling-supported documents. [started: server-side path ingest for text-like files]
-- Support recursive folder ingestion for RAG sources. [started: CLI/API/GUI path flow]
+- Add GUI upload/select flow for Docling-supported documents. [started: server-side path ingest for text-like files and Docling CLI formats]
+- Support recursive folder ingestion for RAG sources. [started: CLI/API/GUI path flow with native + Docling CLI parsers]
 - Trigger ingestion and show progress/status/errors. [started]
-- Store an ingestion run record with source path/URI, file hash, size, MIME/type, parser/Docling version, timestamps, status, and error details. [started: run path/parser/status/counts + per-document hash]
+- Store an ingestion run record with source path/URI, file hash, size, MIME/type, parser/Docling version, timestamps, status, and error details. [started: run path/parser/status/counts + per-document hash + Docling CLI version label]
 - Link ingestion run → document → chunks → generated memory candidates/evidence citations.
 - Show document provenance and chunk lineage in the GUI.
 

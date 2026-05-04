@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"log"
@@ -24,7 +25,32 @@ func New(store *memory.Store, cfg config.Config) *Server {
 	return s
 }
 
-func (s *Server) Handler() http.Handler { return s.mux }
+func (s *Server) Handler() http.Handler { return s.authMiddleware(s.mux) }
+
+func (s *Server) authMiddleware(next http.Handler) http.Handler {
+	token, ok := s.cfg.Server.BearerToken()
+	if !ok {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" || !isAPIPath(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		got := strings.TrimSpace(r.Header.Get("Authorization"))
+		const prefix = "Bearer "
+		if !strings.HasPrefix(got, prefix) || subtle.ConstantTimeCompare([]byte(strings.TrimSpace(strings.TrimPrefix(got, prefix))), []byte(token)) != 1 {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="llm-memory"`)
+			writeErrorStatus(w, http.StatusUnauthorized, errors.New("missing or invalid bearer token"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func isAPIPath(path string) bool {
+	return path == "/api" || path == "/api/v1" || strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/api/v1/")
+}
 
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /", s.handleIndex)

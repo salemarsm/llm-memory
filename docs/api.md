@@ -4,6 +4,13 @@ See [openapi.yaml](openapi.yaml) for machine-readable API documentation.
 
 Core endpoints are available under both `/api/...` and `/api/v1/...` during v0.x. Prefer `/api/v1/...` for new integrations.
 
+Auth:
+
+- Loopback-only servers may run without auth for local development.
+- When `server.auth_token` or `server.auth_token_env` is configured, `/api` and `/api/v1` endpoints require `Authorization: Bearer <token>`.
+- Non-loopback binds require an auth token at config validation time.
+- `/healthz` remains public.
+
 Core endpoints:
 
 - `POST /api/context`

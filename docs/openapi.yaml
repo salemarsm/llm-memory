@@ -5,10 +5,13 @@ info:
   description: Local-first canonical memory API for AI agents. Endpoints are available under /api and /api/v1 during v0.x; prefer /api/v1 for new integrations.
 servers:
   - url: http://127.0.0.1:8787
+security:
+  - bearerAuth: []
 paths:
   /healthz:
     get:
       summary: Health check
+      security: []
       responses:
         '200':
           description: OK
@@ -204,6 +207,12 @@ paths:
                 items:
                   $ref: '#/components/schemas/Event'
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: token
+      description: Required for `/api` and `/api/v1` endpoints when `server.auth_token` or `server.auth_token_env` is configured; non-loopback binds require a token.
   parameters:
     MemoryID:
       name: id

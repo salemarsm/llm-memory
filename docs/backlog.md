@@ -30,22 +30,10 @@ These came from early code review feedback and are already implemented after `v0
 - Retrieval baseline tests for BM25 ranking, technical short-token queries, FTS-miss fallback, empty-context event suppression, and feedback events.
 - `POST /api/feedback` plus `context_id` in context responses.
 - Dense memory table GUI with filters and usage counters; no graph/Neo4j dependency.
+- API bearer-token config and middleware, loopback-only no-auth mode, non-loopback auth validation, protected endpoint tests, and OpenAPI security scheme.
 
 
 ## P0 — Safety, correctness, and release hygiene
-
-### AUTH-001 — API token support
-
-- Add token config to `config.Config`.
-- Support `Authorization: Bearer <token>`.
-- Allow loopback-only no-auth mode for development.
-- Add tests for protected endpoints.
-- Update OpenAPI security scheme.
-
-Acceptance:
-
-- Non-loopback bind without auth fails or warns loudly.
-- Requests without token are rejected when auth enabled.
 
 ### REL-001 — GitHub Actions CI docs sanity
 

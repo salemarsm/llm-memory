@@ -49,10 +49,10 @@ Implemented today:
 - MCP tools: `memory_context`, `memory_suggest`, `memory_remember`, `memory_search`
 - heuristic memory suggestions
 - document/chunk schema foundation for future RAG ingestion
+- HTTP API bearer-token auth for non-loopback binds
 
 Planned / not production-ready yet:
 
-- API token / local auth ([P0 backlog](docs/backlog.md))
 - Docling ingestion command
 - hybrid vector ranking
 - full contradiction resolution policy

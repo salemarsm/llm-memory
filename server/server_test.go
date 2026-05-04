@@ -91,3 +91,37 @@ func TestAPIAndGUI(t *testing.T) {
 		t.Fatalf("GET / status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestBearerAuthProtectsAPI(t *testing.T) {
+	store, err := memory.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	cfg := config.Default()
+	cfg.Server.AuthToken = "secret-token"
+	h := New(store, cfg).Handler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("GET /api/config without token status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/config", nil)
+	req.Header.Set("Authorization", "Bearer secret-token")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/config with token status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /healthz should remain public status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}

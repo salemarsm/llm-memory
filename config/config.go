@@ -3,7 +3,9 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
+	"strings"
 )
 
 type Config struct {
@@ -14,7 +16,9 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Addr string `json:"addr"`
+	Addr         string `json:"addr"`
+	AuthToken    string `json:"auth_token,omitempty"`
+	AuthTokenEnv string `json:"auth_token_env,omitempty"`
 }
 
 type DatabaseConfig struct {
@@ -74,7 +78,40 @@ func (c Config) Validate() error {
 	if c.Database.Path == "" {
 		return errors.New("database.path is required")
 	}
+	if !IsLoopbackAddr(c.Server.Addr) {
+		if _, ok := c.Server.BearerToken(); !ok {
+			return errors.New("server auth token is required when binding outside loopback; set server.auth_token_env or server.auth_token")
+		}
+	}
 	return nil
+}
+
+func (s ServerConfig) BearerToken() (string, bool) {
+	if v := strings.TrimSpace(s.AuthToken); v != "" {
+		return v, true
+	}
+	if env := strings.TrimSpace(s.AuthTokenEnv); env != "" {
+		if v := strings.TrimSpace(os.Getenv(env)); v != "" {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+func IsLoopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	host = strings.Trim(strings.TrimSpace(host), "[]")
+	if host == "" {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func WriteDefault(path string) error {

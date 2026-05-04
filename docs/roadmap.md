@@ -284,3 +284,10 @@ Goal: stable API and schema guarantees for local agent memory.
 - training/fine-tuning models
 - storing secrets
 - multi-tenant production cloud use before auth/isolation matures
+
+### v0.3 session/project continuity — started
+
+- Added SQLite-backed `sessions(id, project, started_at, ended_at, summary)` model.
+- Added session start/end/summary API and MCP tools.
+- `memory_context` can include current session and latest closed session summary when `project` is supplied.
+- `memmcp` now auto-detects project identity when project/subject are omitted.

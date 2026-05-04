@@ -454,3 +454,12 @@ Acceptance:
 8. RAG-001
 9. RAG-003
 10. RET-001
+
+## Sessions and project auto-detect
+
+- [x] Add SQLite-backed sessions table.
+- [x] Add `memory_session_start`, `memory_session_end`, `memory_session_summary` MCP tools.
+- [x] Include current/latest session context in `memory_context` when project is known.
+- [x] Auto-detect project from `.llm-memory/config.json`, git remote, then directory basename.
+- [ ] Add variant detection warnings for similar project names.
+- [ ] Add ergonomic CLI wrappers for session lifecycle.

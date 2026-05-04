@@ -38,7 +38,8 @@ type toolCall struct {
 }
 
 type mcpServer struct {
-	store *memory.Store
+	store   *memory.Store
+	project string
 }
 
 func main() {
@@ -57,7 +58,7 @@ func main() {
 	}
 	defer store.Close()
 
-	s := &mcpServer{store: store}
+	s := &mcpServer{store: store, project: memory.DetectProject("")}
 	s.run()
 }
 
@@ -119,6 +120,7 @@ func (s *mcpServer) callTool(call toolCall) (string, error) {
 		if err := json.Unmarshal(call.Arguments, &req); err != nil {
 			return "", err
 		}
+		s.defaultProjectContext(&req.Project, &req.Subject)
 		out, err := s.store.BuildContext(ctx, req)
 		return pretty(out), err
 	case "memory_remember":
@@ -129,8 +131,11 @@ func (s *mcpServer) callTool(call toolCall) (string, error) {
 		if m.Source.Kind == "" {
 			m.Source = memory.Source{Kind: "mcp", Ref: "memory_remember"}
 		}
+		if m.Subject == "" {
+			m.Subject = s.project
+		}
 		if m.Scope == "" {
-			m.Scope = memory.ScopeGlobal
+			m.Scope = memory.ScopeProject
 		}
 		if m.Confidence == 0 {
 			m.Confidence = 0.8
@@ -145,7 +150,40 @@ func (s *mcpServer) callTool(call toolCall) (string, error) {
 		if err := json.Unmarshal(call.Arguments, &q); err != nil {
 			return "", err
 		}
+		if q.Subject == "" {
+			q.Subject = s.project
+		}
 		out, err := s.store.Search(ctx, q)
+		return pretty(out), err
+	case "memory_session_start":
+		var req memory.SessionStartRequest
+		if err := json.Unmarshal(call.Arguments, &req); err != nil {
+			return "", err
+		}
+		if req.Project == "" {
+			req.Project = s.project
+		}
+		out, err := s.store.StartSession(ctx, req.Project)
+		return pretty(out), err
+	case "memory_session_end":
+		var req memory.SessionEndRequest
+		if err := json.Unmarshal(call.Arguments, &req); err != nil {
+			return "", err
+		}
+		if req.Project == "" {
+			req.Project = s.project
+		}
+		out, err := s.store.EndActiveSession(ctx, req.Project, req.Summary)
+		return pretty(out), err
+	case "memory_session_summary":
+		var req memory.SessionSummaryRequest
+		if err := json.Unmarshal(call.Arguments, &req); err != nil {
+			return "", err
+		}
+		if req.Project == "" && req.SessionID == "" {
+			req.Project = s.project
+		}
+		out, err := s.store.SessionSummary(ctx, req)
 		return pretty(out), err
 	case "memory_suggest":
 		var req memory.SuggestRequest
@@ -159,12 +197,21 @@ func (s *mcpServer) callTool(call toolCall) (string, error) {
 	}
 }
 
+func (s *mcpServer) defaultProjectContext(project, subject *string) {
+	if *project == "" {
+		*project = s.project
+	}
+	if *subject == "" {
+		*subject = *project
+	}
+}
+
 func tools() []map[string]any {
 	return []map[string]any{
 		{
 			"name":        "memory_context",
 			"description": "Silently call before answering. Returns compact prompt-ready memory under a token budget. Do not expose raw records unless asked.",
-			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"query": map[string]string{"type": "string"}, "subject": map[string]string{"type": "string"}, "scopes": map[string]any{"type": "array", "items": map[string]string{"type": "string"}}, "max_tokens": map[string]string{"type": "integer"}}, "required": []string{"query"}},
+			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"query": map[string]string{"type": "string"}, "project": map[string]string{"type": "string"}, "subject": map[string]string{"type": "string"}, "scopes": map[string]any{"type": "array", "items": map[string]string{"type": "string"}}, "max_tokens": map[string]string{"type": "integer"}}, "required": []string{"query"}},
 		},
 		{
 			"name":        "memory_suggest",
@@ -174,12 +221,27 @@ func tools() []map[string]any {
 		{
 			"name":        "memory_remember",
 			"description": "Store an approved durable memory. Use for explicit preferences, stable facts, project decisions, tasks, and corrections. Avoid casual or sensitive content unless confirmed.",
-			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"type": map[string]string{"type": "string"}, "subject": map[string]string{"type": "string"}, "content": map[string]string{"type": "string"}, "scope": map[string]string{"type": "string"}, "confidence": map[string]string{"type": "number"}, "tags": map[string]any{"type": "array", "items": map[string]string{"type": "string"}}}, "required": []string{"type", "subject", "content"}},
+			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"type": map[string]string{"type": "string"}, "subject": map[string]string{"type": "string"}, "content": map[string]string{"type": "string"}, "scope": map[string]string{"type": "string"}, "confidence": map[string]string{"type": "number"}, "tags": map[string]any{"type": "array", "items": map[string]string{"type": "string"}}}, "required": []string{"type", "content"}},
 		},
 		{
 			"name":        "memory_search",
 			"description": "Search raw memories. Prefer memory_context for normal prompt injection because it is token-budgeted.",
 			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"text": map[string]string{"type": "string"}, "subject": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}},
+		},
+		{
+			"name":        "memory_session_start",
+			"description": "Start or return the active persistent memory session for a project. Project auto-detects when omitted.",
+			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]string{"type": "string"}}},
+		},
+		{
+			"name":        "memory_session_end",
+			"description": "End the active memory session for a project with a concise durable summary.",
+			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]string{"type": "string"}, "summary": map[string]string{"type": "string"}}, "required": []string{"summary"}},
+		},
+		{
+			"name":        "memory_session_summary",
+			"description": "Return the active or latest closed session summary for a project, or a specific session by id.",
+			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]string{"type": "string"}, "session_id": map[string]string{"type": "string"}}},
 		},
 	}
 }

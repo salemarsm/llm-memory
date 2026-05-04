@@ -91,3 +91,12 @@ type RankedMemory struct {
 	Memory  Memory          `json:"memory"`
 	Ranking RankingMetadata `json:"ranking"`
 }
+
+// Session captures a coding-agent work session for a project.
+type Session struct {
+	ID        string     `json:"id"`
+	Project   string     `json:"project"`
+	StartedAt time.Time  `json:"started_at"`
+	EndedAt   *time.Time `json:"ended_at,omitempty"`
+	Summary   string     `json:"summary"`
+}

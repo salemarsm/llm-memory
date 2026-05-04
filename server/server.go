@@ -64,6 +64,9 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("POST "+prefix+"/search", s.handleSearchPOST)
 		s.mux.HandleFunc("GET "+prefix+"/usage", s.handleUsage)
 		s.mux.HandleFunc("POST "+prefix+"/context", s.handleContext)
+		s.mux.HandleFunc("POST "+prefix+"/sessions/start", s.handleSessionStart)
+		s.mux.HandleFunc("POST "+prefix+"/sessions/end", s.handleSessionEnd)
+		s.mux.HandleFunc("POST "+prefix+"/sessions/summary", s.handleSessionSummary)
 		s.mux.HandleFunc("POST "+prefix+"/feedback", s.handleFeedback)
 		s.mux.HandleFunc("POST "+prefix+"/suggest", s.handleSuggest)
 		s.mux.HandleFunc("POST "+prefix+"/supersede/{id}", s.handleSupersede)
@@ -168,6 +171,57 @@ func (s *Server) handleContext(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp, err := s.store.BuildContext(r.Context(), req)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleSessionStart(w http.ResponseWriter, r *http.Request) {
+	var req memory.SessionStartRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorStatus(w, http.StatusBadRequest, err)
+		return
+	}
+	if req.Project == "" {
+		req.Project = memory.DetectProject("")
+	}
+	resp, err := s.store.StartSession(r.Context(), req.Project)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleSessionEnd(w http.ResponseWriter, r *http.Request) {
+	var req memory.SessionEndRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorStatus(w, http.StatusBadRequest, err)
+		return
+	}
+	if req.Project == "" {
+		req.Project = memory.DetectProject("")
+	}
+	resp, err := s.store.EndActiveSession(r.Context(), req.Project, req.Summary)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleSessionSummary(w http.ResponseWriter, r *http.Request) {
+	var req memory.SessionSummaryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorStatus(w, http.StatusBadRequest, err)
+		return
+	}
+	if req.Project == "" && req.SessionID == "" {
+		req.Project = memory.DetectProject("")
+	}
+	resp, err := s.store.SessionSummary(r.Context(), req)
 	if err != nil {
 		writeError(w, err)
 		return

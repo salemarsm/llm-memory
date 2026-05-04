@@ -134,6 +134,15 @@ func (s *Store) Migrate(ctx context.Context) error {
 		);`,
 		`CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(id UNINDEXED, document_id UNINDEXED, heading_path, content);`,
 		`CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id, ordinal);`,
+		`CREATE TABLE IF NOT EXISTS sessions (
+			id TEXT PRIMARY KEY,
+			project TEXT NOT NULL,
+			started_at TEXT NOT NULL,
+			ended_at TEXT,
+			summary TEXT NOT NULL DEFAULT ''
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_sessions_project_started ON sessions(project, started_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_sessions_project_active ON sessions(project, ended_at);`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {

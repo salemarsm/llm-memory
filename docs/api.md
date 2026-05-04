@@ -86,3 +86,14 @@ Compatibility rules:
 - `semantic_score` is planned and will be present only when an embedding adapter is configured and used.
 - Superseded, deleted, inactive, or expired memories must not appear as current truth in default context responses.
 - If active memories conflict, the API should surface ambiguity through metadata instead of silently choosing a winner.
+
+## Sessions (v0.3 preview)
+
+Sessions add narrative continuity for coding agents. They are project-scoped and stored in SQLite as canonical operational metadata, not chat history.
+
+- `POST /api/sessions/start` with `{ "project": "my-project" }` starts or returns the active session.
+- `POST /api/sessions/end` with `{ "project": "my-project", "summary": "..." }` closes the active session.
+- `POST /api/sessions/summary` with `{ "project": "my-project" }` returns the active session or latest closed session.
+- `POST /api/context` accepts optional `project`; when present it auto-starts an active session and includes the latest closed session summary within the token budget.
+
+MCP exposes the same primitives as `memory_session_start`, `memory_session_end`, and `memory_session_summary`. In `memmcp`, omitted project/subject fields default to auto-detected project identity from `.llm-memory/config.json`, git remote, or directory basename.

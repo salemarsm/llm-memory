@@ -156,3 +156,36 @@ func TestSearchIncludeRanking(t *testing.T) {
 		t.Fatalf("GET /api/memories include_ranking status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestSessionAPIAndContext(t *testing.T) {
+	store, err := memory.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	srv := New(store, config.Default())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/sessions/start", bytes.NewBufferString(`{"project":"demo"}`))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("start status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/sessions/end", bytes.NewBufferString(`{"project":"demo","summary":"Fixed setup flow."}`))
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("end status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/context", bytes.NewBufferString(`{"project":"demo","query":"start","max_tokens":300}`))
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("context status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Fixed setup flow") {
+		t.Fatalf("expected session summary in context: %s", rec.Body.String())
+	}
+}

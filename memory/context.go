@@ -13,6 +13,7 @@ const defaultContextTokenBudget = 1200
 
 type ContextRequest struct {
 	Query       string       `json:"query"`
+	Project     string       `json:"project,omitempty"`
 	Subject     string       `json:"subject"`
 	Types       []MemoryType `json:"types"`
 	Scopes      []Scope      `json:"scopes"`
@@ -31,6 +32,20 @@ type ContextResponse struct {
 }
 
 func (s *Store) BuildContext(ctx context.Context, req ContextRequest) (ContextResponse, error) {
+	project := ""
+	if strings.TrimSpace(req.Project) != "" {
+		project = NormalizeProject(req.Project)
+	}
+	if project != "" && req.Subject == "" {
+		req.Subject = project
+	}
+	var sessionBlock string
+	if project != "" {
+		if _, err := s.EnsureActiveSession(ctx, project); err != nil {
+			log.Printf("llm-memory: ensure active session failed: %v", err)
+		}
+		sessionBlock = s.contextSessionBlock(ctx, project)
+	}
 	budget := req.MaxTokens
 	if budget <= 0 {
 		budget = defaultContextTokenBudget
@@ -69,6 +84,14 @@ func (s *Store) BuildContext(ctx context.Context, req ContextRequest) (ContextRe
 
 	var b strings.Builder
 	used := 0
+	if sessionBlock != "" {
+		cost := EstimateTokens(sessionBlock)
+		if cost <= budget {
+			b.WriteString(sessionBlock)
+			b.WriteByte('\n')
+			used += cost
+		}
+	}
 	selected := make([]Memory, 0, len(items))
 	truncated := false
 	for _, m := range items {
@@ -92,6 +115,7 @@ func (s *Store) BuildContext(ctx context.Context, req ContextRequest) (ContextRe
 		payload, _ := json.Marshal(map[string]any{
 			"context_id":       contextID,
 			"query":            req.Query,
+			"project":          project,
 			"subject":          req.Subject,
 			"memory_ids":       memoryIDs(selected),
 			"estimated_tokens": used,
@@ -140,4 +164,22 @@ func EstimateTokens(s string) int {
 
 func compactWhitespace(s string) string {
 	return strings.Join(strings.Fields(s), " ")
+}
+
+func (s *Store) contextSessionBlock(ctx context.Context, project string) string {
+	lines := []string{}
+	if active, err := s.ActiveSession(ctx, project); err == nil {
+		lines = append(lines, fmt.Sprintf("- [session/current project=%s id=%s started=%s] active", active.Project, active.ID, active.StartedAt.Format(time.RFC3339)))
+	}
+	if last, err := s.LastClosedSession(ctx, project); err == nil && strings.TrimSpace(last.Summary) != "" {
+		ended := ""
+		if last.EndedAt != nil {
+			ended = last.EndedAt.Format(time.RFC3339)
+		}
+		lines = append(lines, fmt.Sprintf("- [session/last project=%s id=%s ended=%s] %s", last.Project, last.ID, ended, compactWhitespace(last.Summary)))
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "Session context:\n" + strings.Join(lines, "\n")
 }

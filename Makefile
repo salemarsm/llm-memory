@@ -10,12 +10,13 @@ LDFLAGS := -s -w \
 	-X github.com/salemarsm/llm-memory/internal/version.Commit=$(COMMIT) \
 	-X github.com/salemarsm/llm-memory/internal/version.Date=$(DATE)
 
-COMMANDS := llm-memory memctl memmcp memserver
+COMMANDS := ginko llm-memory memctl memmcp memserver
 
 all: check
 
 build:
 	@mkdir -p $(BIN_DIR)
+	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/ginko ./cmd/ginko
 	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/llm-memory ./cmd/llm-memory
 	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/memctl ./cmd/memctl
 	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/memmcp ./cmd/memmcp
@@ -29,6 +30,7 @@ check:
 	$(GO) build ./cmd/...
 
 install:
+	$(GO) install -ldflags "$(LDFLAGS)" ./cmd/ginko
 	$(GO) install -ldflags "$(LDFLAGS)" ./cmd/llm-memory
 	$(GO) install -ldflags "$(LDFLAGS)" ./cmd/memctl
 	$(GO) install -ldflags "$(LDFLAGS)" ./cmd/memmcp

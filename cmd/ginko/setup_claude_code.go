@@ -11,6 +11,7 @@ import (
 )
 
 func doSetupClaudeCode(args []string) {
+	args = normalizeClaudeCodeSetupArgs(args)
 	fs := flag.NewFlagSet("setup claude-code", flag.ExitOnError)
 	scope := fs.String("scope", "user", "user or project")
 	dryRun := fs.Bool("dry-run", false, "print planned changes; do not write")
@@ -74,6 +75,21 @@ func doSetupClaudeCode(args []string) {
 	fmt.Printf("ginko setup complete (%s) — %s\n", action, target)
 	fmt.Println()
 	fmt.Println("Restart Claude Code to load the MCP server.")
+}
+
+func normalizeClaudeCodeSetupArgs(args []string) []string {
+	out := make([]string, 0, len(args)+1)
+	for _, arg := range args {
+		switch arg {
+		case "--local", "-local", "--project", "-project":
+			out = append(out, "-scope", "project")
+		case "--user", "-user":
+			out = append(out, "-scope", "user")
+		default:
+			out = append(out, arg)
+		}
+	}
+	return out
 }
 
 func resolveSettingsPath(scope string) (string, error) {

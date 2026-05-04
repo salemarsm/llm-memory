@@ -54,6 +54,19 @@ func TestPlanUpdate_Merge(t *testing.T) {
 	}
 }
 
+func TestNormalizeClaudeCodeSetupArgs_LocalAlias(t *testing.T) {
+	got := normalizeClaudeCodeSetupArgs([]string{"--dry-run", "--local"})
+	want := []string{"--dry-run", "-scope", "project"}
+	if len(got) != len(want) {
+		t.Fatalf("got %#v, want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %#v, want %#v", got, want)
+		}
+	}
+}
+
 func TestPlanUpdate_Noop(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")

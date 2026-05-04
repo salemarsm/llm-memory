@@ -148,3 +148,20 @@ func TestSearchRankedIncludesLexicalScore(t *testing.T) {
 		t.Fatalf("expected useful ranking metadata: %#v", rows[0].Ranking)
 	}
 }
+
+func TestFTSQuery_CapsAtTwelveTerms(t *testing.T) {
+	q := ftsQuery("one two three four five six seven eight nine ten eleven twelve thirteen fourteen")
+	terms := strings.Split(q, " OR ")
+	if len(terms) != maxFTSQueryTerms {
+		t.Fatalf("got %d terms: %q", len(terms), q)
+	}
+	if strings.Contains(q, "thirteen*") || strings.Contains(q, "fourteen*") {
+		t.Fatalf("query exceeded cap: %q", q)
+	}
+}
+
+func TestFTSQuery_EmptyInput(t *testing.T) {
+	if got := ftsQuery(" \n\t "); got != "" {
+		t.Fatalf("expected empty query, got %q", got)
+	}
+}

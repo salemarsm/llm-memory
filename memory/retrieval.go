@@ -9,6 +9,8 @@ import (
 	"unicode"
 )
 
+const maxFTSQueryTerms = 12
+
 var ftsTokenRE = regexp.MustCompile(`[\pL\pN_]+`)
 
 var ftsStopwords = map[string]struct{}{
@@ -21,7 +23,7 @@ var ftsStopwords = map[string]struct{}{
 // candidate generation, so we OR normalized prefix terms and let BM25 rank them.
 func ftsQuery(text string) string {
 	seen := map[string]struct{}{}
-	terms := []string{}
+	terms := make([]string, 0, maxFTSQueryTerms)
 	for _, token := range ftsTokenRE.FindAllString(text, -1) {
 		raw := strings.ToLower(token)
 		if len([]rune(raw)) < 3 && !isLikelyTechnicalShortToken(token) {
@@ -35,7 +37,7 @@ func ftsQuery(text string) string {
 		}
 		seen[raw] = struct{}{}
 		terms = append(terms, raw+"*")
-		if len(terms) >= 12 {
+		if len(terms) >= maxFTSQueryTerms {
 			break
 		}
 	}

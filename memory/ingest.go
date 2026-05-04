@@ -278,8 +278,12 @@ func readDoclingMarkdown(dir string) (string, error) {
 }
 
 func splitMarkdownChunks(text string, maxRunes int) []string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
 	parts := strings.Split(text, "\n\n")
-	var out []string
+	out := make([]string, 0, len(parts))
 	var cur strings.Builder
 	flush := func() {
 		chunk := strings.TrimSpace(cur.String())
@@ -296,15 +300,18 @@ func splitMarkdownChunks(text string, maxRunes int) []string {
 		if cur.Len() > 0 && cur.Len()+len(part)+2 > maxRunes {
 			flush()
 		}
-		if len([]rune(part)) > maxRunes {
+		runes := []rune(part)
+		if len(runes) > maxRunes {
 			flush()
-			runes := []rune(part)
 			for len(runes) > 0 {
 				n := maxRunes
 				if len(runes) < n {
 					n = len(runes)
 				}
-				out = append(out, strings.TrimSpace(string(runes[:n])))
+				chunk := strings.TrimSpace(string(runes[:n]))
+				if chunk != "" {
+					out = append(out, chunk)
+				}
 				runes = runes[n:]
 			}
 			continue
@@ -316,7 +323,7 @@ func splitMarkdownChunks(text string, maxRunes int) []string {
 	}
 	flush()
 	if len(out) == 0 {
-		out = []string{fmt.Sprintf("%s", strings.TrimSpace(text))}
+		return []string{text}
 	}
 	return out
 }

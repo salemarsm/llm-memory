@@ -55,10 +55,10 @@ Status: **mostly implemented**.
 
 ### Remaining v0.1 polish
 
-- GitHub Actions CI
-- GoReleaser config and release artifacts for Linux/macOS/Windows
-- version command with ldflags stamping
-- Makefile or Taskfile
+- GitHub Actions CI [post-alpha]
+- GoReleaser config for release artifacts on Linux/macOS/Windows [post-alpha]
+- version command with ldflags stamping [post-alpha]
+- Makefile [post-alpha]
 - example screenshots/GIF
 - schema documentation generated from migrations/source
 - basic benchmark harness
@@ -76,7 +76,7 @@ Goal: make the project safe and easy enough for real local agent workflows.
 - `install.sh` for local binary install
 - release builds attached to GitHub releases
 - `llm-memory upgrade` or documented upgrade path
-- CI on push/PR
+- CI on push/PR [post-alpha]
 - smoke tests for `memserver`, `memctl`, `memmcp`
 
 ### Should have

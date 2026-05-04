@@ -120,7 +120,7 @@ The sharper niche is:
 
 > **Canonical local memory for coding agents and personal AI infrastructure.**
 
-See [Competitive analysis: Engram](docs/competitive-engram.md) for the closest direct comparison and the implementation practices we should borrow without losing this project's canonical-memory focus.
+See [Choosing Engram or llm-memory](docs/competitive-engram.md) for the closest direct comparison and the implementation practices we should borrow without losing this project's canonical-memory focus.
 
 ## 5-minute quickstart
 
@@ -128,10 +128,7 @@ See [Competitive analysis: Engram](docs/competitive-engram.md) for the closest d
 git clone https://github.com/salemarsm/llm-memory.git
 cd llm-memory
 
-go build -o bin/llm-memory ./cmd/llm-memory
-go build -o bin/memserver ./cmd/memserver
-go build -o bin/memmcp ./cmd/memmcp
-go build -o bin/memctl ./cmd/memctl
+make build
 
 bin/llm-memory init
 bin/llm-memory doctor
@@ -531,10 +528,7 @@ SQLite         -> fonte da verdade
 git clone https://github.com/salemarsm/llm-memory.git
 cd llm-memory
 
-go build -o bin/llm-memory ./cmd/llm-memory
-go build -o bin/memserver ./cmd/memserver
-go build -o bin/memmcp ./cmd/memmcp
-go build -o bin/memctl ./cmd/memctl
+make build
 
 bin/llm-memory init
 bin/llm-memory doctor

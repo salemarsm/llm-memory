@@ -1,60 +1,96 @@
-# Competitive analysis: Engram
+# Choosing Engram or llm-memory
 
-Engram is the closest known direct comparator for `llm-memory`: Go, SQLite, FTS5, MCP, HTTP API, CLI/TUI, and a strong focus on coding-agent memory.
+Engram is the closest known peer to `llm-memory`: Go, SQLite, FTS5, MCP, HTTP API, CLI/TUI, and a strong focus on coding-agent memory.
 
-This note extracts practices worth adopting while keeping `llm-memory` differentiated as a canonical, auditable memory database rather than only a coding-agent observation log.
+This document is not a takedown. Engram is a solid project and may be the better choice for many coding-agent workflows. The goal here is to clarify overlap, learn from good product decisions, and keep `llm-memory` focused on its own niche: canonical, auditable memory with evidence and lifecycle semantics.
 
-## What Engram does well
+## Quick guidance
 
-### 1. Crisp distribution story
+Choose **Engram** when you mainly want:
+
+- persistent memory for coding agents,
+- a mature agent setup story,
+- CLI/TUI workflows,
+- session summaries and coding observations,
+- optional sync/cloud replication paths,
+- a single polished tool for day-to-day agent memory.
+
+Choose **llm-memory** when you mainly want:
+
+- a local-first canonical memory database,
+- explicit separation between memory, evidence, events, chunks, and embeddings,
+- supersession and audit lifecycle as core primitives,
+- HTTP/MCP/CLI over the same canonical model,
+- personal AI infrastructure beyond coding-agent sessions,
+- RAG where documents/chunks are evidence and memories are conclusions.
+
+They can also be complementary: Engram can serve as a coding-agent memory layer, while `llm-memory` can serve as a more canonical long-term memory/evidence store.
+
+## Where they overlap
+
+Both projects care about:
+
+- local-first operation,
+- Go-native distribution,
+- SQLite as the durable local store,
+- FTS5 search,
+- MCP integration,
+- coding-agent workflows,
+- avoiding a mandatory external vector database.
+
+This overlap validates the category. It also means `llm-memory` should avoid positioning itself as just another coding-agent memory tool.
+
+## Product differences
+
+| Dimension | Engram | llm-memory |
+| --- | --- | --- |
+| Primary lens | Persistent memory for coding agents | Canonical operational memory for agents/personal AI |
+| Stored unit | Observations/session memory | Canonical memories, events, documents, chunks |
+| Lifecycle emphasis | Save/update/delete, topic evolution, sessions | Supersession, provenance, event log, audit trail |
+| Retrieval emphasis | Search/context/timeline for coding work | Token-budgeted context + drill-down to memory/evidence |
+| RAG stance | Not the central thesis | Evidence vs conclusion is central |
+| Ideal user | Coding-agent power user | Builder of local AI memory infrastructure |
+
+## Practices worth adopting
+
+### 1. Distribution should feel boring
 
 Engram's onboarding promise is simple: one binary, one SQLite file, no runtime dependencies.
 
-Practices to adopt:
+Adopt:
 
-- Ship one primary binary for normal users.
-- Add GitHub Actions and GoReleaser early.
-- Publish release archives for Linux/macOS/Windows with checksums.
-- Document `go install` as the trust-preserving path for technical users.
-- Add Homebrew-ready packaging later.
+- primary binary for normal users,
+- GitHub Actions and GoReleaser,
+- release archives for Linux/macOS/Windows with checksums,
+- `go install` as the transparent technical-user path,
+- Homebrew-ready packaging later.
 
-`llm-memory` angle:
+`llm-memory` framing:
 
 > One local canonical memory database. SQLite source of truth. HTTP/MCP/CLI over the same lifecycle model.
 
-### 2. Agent setup is product, not just docs
+### 2. Agent setup is part of the product
 
-Engram provides per-agent setup docs and `engram setup <agent>` commands. It also explains compaction survival and project auto-detection.
+Engram treats per-agent setup as first-class: setup commands, docs, compaction survival notes, and project auto-detection.
 
-Practices to adopt:
+Adopt:
 
-- Implement `llm-memory integrate <agent>` or `llm-memory setup <agent>` for at least OpenClaw, Claude Code, Codex-like CLI, and generic MCP.
-- Keep manual JSON examples, but make the happy path one command where safe.
-- Add bootstrap prompts / agent instructions that encode memory usage policy.
-- Add smoke tests for generated config snippets where possible.
+- `llm-memory setup <agent>` or `llm-memory integrate <agent>` for OpenClaw, Claude Code, Codex-like CLI, and generic MCP,
+- manual JSON examples as fallback,
+- bootstrap prompts that encode memory policy,
+- smoke tests for generated config snippets.
 
-`llm-memory` differentiation:
+`llm-memory` setup should emphasize transparent canonical flow:
 
-- Setup should emphasize transparent canonical memory flow:
-  1. context before answering,
-  2. suggest after meaningful work,
-  3. approve/store/supersede with audit trail.
+1. retrieve compact context before answering,
+2. suggest durable memories after meaningful work,
+3. approve/store/supersede with audit trail.
 
-### 3. Progressive disclosure retrieval
+### 3. Retrieval should use progressive disclosure
 
-Engram documents a useful three-layer pattern: search compact results, then timeline, then full observation.
+Engram's compact-search → timeline → full-observation pattern is token-efficient.
 
-Practices to adopt:
-
-- Keep `/api/context` compact and token-budgeted.
-- Add explicit drill-down endpoints/workflows:
-  - compact memory search,
-  - memory detail,
-  - event/supersession timeline,
-  - evidence/document chunks.
-- Make MCP tools mirror that flow.
-
-`llm-memory` stronger version:
+Adopt a similar drill-down flow:
 
 ```txt
 memory_context        -> prompt-ready compact canonical memory
@@ -64,104 +100,91 @@ memory_timeline       -> lifecycle/audit trail
 memory_evidence       -> supporting document chunks/events
 ```
 
-### 4. Memory hygiene primitives
+Default context should stay compact. Full records and evidence should be fetched only when needed.
+
+### 4. Memory hygiene needs explicit primitives
 
 Engram has pragmatic hygiene features: topic keys, revision counts, duplicate counts, soft delete, dedupe hashes, and project/scope filters.
 
-Practices to adopt/adapt:
+Adopt/adapt:
 
-- Add a stable `topic_key` concept for evolving subjects/decisions.
-- Add duplicate detection metadata instead of blindly inserting repeated memories.
-- Add revision counters for updates/supersession chains.
-- Keep soft-delete semantics visible in API/GUI.
-- Provide a helper to suggest canonical topic keys.
+- stable `topic_key` for evolving subjects/decisions,
+- duplicate detection metadata instead of repeated inserts,
+- revision/lifecycle counters for updates and supersession chains,
+- visible soft-delete semantics,
+- helper for canonical topic-key suggestions.
 
-`llm-memory` adaptation:
+Keep the `llm-memory` distinction: these should support canonical memory lifecycle, not replace it with a mutable observation log.
 
-- Do not collapse everything into mutable observations. Preserve the stronger canonical lifecycle:
-  - new memory,
-  - superseded memory,
-  - replacement memory,
-  - event log,
-  - provenance/evidence.
+### 5. Identity ambiguity should fail loudly
 
-### 5. Project detection and ambiguity handling
+Engram treats project detection as operationally important and refuses to guess when ambiguous.
 
-Engram treats project identity as a first-class operational issue. It detects from cwd/git/config and refuses to guess when ambiguous.
+Adopt:
 
-Practices to adopt:
+- project/subject detection helpers for integrations,
+- structured ambiguity errors,
+- repo-local config such as `.llm-memory/config.json`,
+- consolidation tools for similar project/subject names.
 
-- Add project/subject detection helpers for agent integrations.
-- Return structured ambiguity errors instead of silently writing to the wrong subject/project.
-- Support repo-local config, e.g. `.llm-memory/config.json`, for canonical project identity.
-- Add merge/consolidate tools for similar project names.
+For `llm-memory`, this should generalize beyond code repositories: subject identity should be explicit, validated, and auditable.
 
-`llm-memory` angle:
+### 6. Doctor/repair should be real workflows
 
-- Generalize this beyond code projects: `subject` identity should be explicit, validated, and auditable.
-- For coding agents, project should likely be a subject dimension or metadata field, not a hidden global.
+Engram has visible diagnostic and repair posture.
 
-### 6. Diagnostics and repair flows
+Adopt:
 
-Engram has a visible `doctor` posture, diagnostic packages, repair flows, and tests around migrations/legacy schemas.
+- read-only `doctor` checks,
+- explicit repair commands,
+- schema/migration/FTS/config/server/auth/MCP diagnostics,
+- no destructive repair without confirmation,
+- migration and legacy-schema tests.
 
-Practices to adopt:
+### 7. Conflict surfacing belongs in governance
 
-- Expand `llm-memory doctor` into read-only checks plus explicit repair commands.
-- Diagnose DB schema version, migrations, FTS health, config, server reachability, auth exposure, and MCP config.
-- Never auto-repair destructive issues without confirmation.
-- Add migration/legacy-schema tests.
+Engram's relation/conflict work is a good direction for memory quality.
 
-### 7. Conflict surfacing
+Adopt:
 
-Engram's newer work includes memory relations and conflict/judge flows.
+- conflict candidates in `memory_suggest`,
+- first-class relations for conflict/supersession/reinforcement,
+- auditable judge metadata: actor/model, reason, evidence, confidence.
 
-Practices to adopt:
+For `llm-memory`, conflict handling should govern canonical memory writes, not just warn during search.
 
-- Add explicit conflict candidates to `memory_suggest` results.
-- Represent conflicts/supersession/reinforcement as first-class relations.
-- Keep judge decisions auditable: model/actor, reason, evidence, confidence.
+### 8. Sync should remain local-first
 
-`llm-memory` stronger version:
+Engram frames sync/cloud as opt-in replication while local SQLite remains authoritative.
 
-- Treat conflict surfacing as governance over canonical memory, not just search-time warnings.
+Adopt later:
 
-### 8. Sync model is local-first replication
+- local canonical DB remains primary,
+- replication is opt-in and subject/project-scoped,
+- export chunks or migration-safe bundles instead of raw DB sync,
+- conflict handling before multi-writer sync.
 
-Engram's cloud/git sync message is carefully framed: local SQLite remains authoritative; cloud is opt-in replication.
+## What llm-memory should avoid
 
-Practices to adopt later:
+- Becoming only a coding-agent observation tracker.
+- Expanding MCP tools faster than the memory lifecycle stabilizes.
+- Introducing cloud before local safety/auth/governance are solid.
+- Treating raw prompt/session capture as canonical truth. Raw capture can be evidence; memory should be curated conclusion.
 
-- If sync is added, keep local canonical DB primary.
-- Make replication opt-in and project/subject-scoped.
-- Prefer append/export chunks or migration-safe bundles over raw DB sync.
-- Include conflict handling before multi-writer sync.
-
-## What not to copy blindly
-
-- Do not become only a coding-agent observation tracker. `llm-memory` should stay broader: personal AI infrastructure, RAG, assistants, and coding agents.
-- Do not over-expand MCP tools before the lifecycle is stable. Fewer canonical tools are easier to integrate correctly.
-- Do not introduce cloud before local safety/auth/governance are solid.
-- Do not make raw prompt/session capture the default source of truth. It can be evidence, not canonical memory.
-
-## Differentiation to reinforce
-
-Engram's strongest message is "persistent memory for AI coding agents." `llm-memory` should avoid competing as a clone.
-
-Recommended positioning:
+## Recommended positioning
 
 > `llm-memory` is a local-first canonical memory database for AI agents: SQLite source of truth, HTTP/MCP interface, auditable lifecycle, token-budgeted context, and evidence-aware RAG bridge.
 
-Short contrast:
+Useful shorthand:
 
 ```txt
-Engram      = coding-agent observations and session memory
+Engram      = strong coding-agent memory and session workflow
 llm-memory  = canonical operational memory with evidence, audit, supersession, and agent-agnostic retrieval
 ```
 
 Core differentiators to keep visible:
 
-- canonical memory vs raw observation log,
+- canonical memory vs raw observation/session log,
 - provenance/evidence links,
 - supersession lifecycle,
 - append-only events,
@@ -170,22 +193,12 @@ Core differentiators to keep visible:
 - embeddings as replaceable indexes,
 - local-first governance before cloud.
 
-## Implementation priorities derived from this review
+## Near-term implementation priorities
 
-1. **Packaging/CI**: GitHub Actions + GoReleaser + version command.
-2. **Agent setup UX**: one-command setup for key agents plus tested manual snippets.
-3. **Memory hygiene**: `topic_key`, duplicate/revision metadata, better soft-delete docs.
-4. **Progressive disclosure**: add detail/timeline/evidence MCP/API flow.
-5. **Project/subject identity**: detection, ambiguity errors, consolidation tools.
-6. **Doctor/repair**: actionable diagnostics and explicit safe repair commands.
-7. **Conflict governance**: relation table and suggestion-time conflict surfacing.
-
-## Near-term recommended sequence
-
-```txt
-v0.1 polish: CI, version, release config, README install path
-v0.2: auth + doctor + setup skeleton
-v0.3: agent integrations + progressive disclosure MCP tools
-v0.4: topic keys + duplicate/revision + conflict relations + approval queue
-v0.5+: evidence/RAG ingestion and citation-aware context
-```
+1. Packaging/CI: GitHub Actions, GoReleaser, version command.
+2. Agent setup UX: one-command setup for key agents plus tested manual snippets.
+3. Memory hygiene: `topic_key`, duplicate/revision metadata, better soft-delete docs.
+4. Progressive disclosure: detail/timeline/evidence MCP/API flow.
+5. Project/subject identity: detection, ambiguity errors, consolidation tools.
+6. Doctor/repair: actionable diagnostics and explicit safe repair commands.
+7. Conflict governance: relation table and suggestion-time conflict surfacing.

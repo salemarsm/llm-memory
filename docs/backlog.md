@@ -23,6 +23,10 @@ These came from early code review feedback and are already implemented after `v0
 - `/healthz`.
 - `/api/v1` aliases while preserving `/api`.
 - Public `/api/config` no longer returns `api_key_env`.
+- GitHub Actions CI for tests and command builds.
+- GoReleaser release scaffolding.
+- Version metadata command/flags with ldflags support.
+- Makefile for build/test/check/install/snapshot.
 
 
 ## P0 — Safety, correctness, and release hygiene
@@ -40,26 +44,24 @@ Acceptance:
 - Non-loopback bind without auth fails or warns loudly.
 - Requests without token are rejected when auth enabled.
 
-### REL-001 — GitHub Actions CI
+### REL-001 — GitHub Actions CI docs sanity
 
-- Add workflow for `go test ./...`.
-- Build all commands.
-- Run docs sanity script.
-
-Acceptance:
-
-- README CI badge can be restored truthfully.
-
-### REL-002 — Release artifacts
-
-- Build Linux amd64/arm64.
-- Build macOS amd64/arm64.
-- Generate checksums.
-- Attach to GitHub release.
+- Existing workflow runs `go test ./...` and builds all commands.
+- Add a lightweight docs sanity script/check.
 
 Acceptance:
 
-- User can install without Go toolchain.
+- README CI badge can be restored truthfully and docs links/snippets are checked.
+
+### REL-002 — Release artifacts publishing
+
+- GoReleaser config exists.
+- Validate snapshot release locally/CI.
+- Attach release artifacts to GitHub release.
+
+Acceptance:
+
+- User can install without Go toolchain from a tagged release.
 
 ### DOC-001 — Mark implemented vs planned across docs
 
@@ -96,19 +98,6 @@ Acceptance:
 
 ## P1 — Agent UX and installability
 
-### PKG-001 — GoReleaser release config
-
-Inspired by Engram's distribution path: one binary, release archives, checksums, and eventually Homebrew.
-
-- Add `.goreleaser.yaml` for `llm-memory` primary binary and supporting command binaries if kept separate.
-- Build Linux/macOS/Windows amd64/arm64.
-- Stamp version/commit/build date with ldflags.
-- Generate checksums.
-
-Acceptance:
-
-- A tagged release can produce archives without hand-written build commands.
-
 ### AGENT-001 — One-command agent setup skeleton
 
 - Add `llm-memory setup <agent>` or `llm-memory integrate <agent>`.
@@ -130,15 +119,6 @@ Acceptance:
 Acceptance:
 
 - Agent integrations can verify the target subject/project before writing memory.
-
-### CLI-001 — `version` command
-
-- Add `version` to all commands or main CLI.
-- Include commit/version when built with ldflags.
-
-Acceptance:
-
-- `llm-memory version` prints version, commit, build date.
 
 ### CLI-002 — Better `doctor`
 

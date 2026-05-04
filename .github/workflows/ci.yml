@@ -22,12 +22,5 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Test
-        run: go test ./...
-
-      - name: Build commands
-        run: |
-          go build ./cmd/llm-memory
-          go build ./cmd/memctl
-          go build ./cmd/memmcp
-          go build ./cmd/memserver
+      - name: Check
+        run: make check

@@ -90,6 +90,9 @@ func main() {
 	case "integrate":
 		doIntegrate(rest)
 		return
+	case "ingest":
+		doIngest(rest)
+		return
 	}
 
 	sib, ok := dispatch[cmd]

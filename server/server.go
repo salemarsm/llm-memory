@@ -82,6 +82,7 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("POST "+prefix+"/chunks/search", s.handleChunkSearch)
 		s.mux.HandleFunc("POST "+prefix+"/documents/{id}/suggest", s.handleDocumentSuggest)
 		s.mux.HandleFunc("GET "+prefix+"/browse", s.handleBrowse)
+		s.mux.HandleFunc("GET "+prefix+"/ingest/status", s.handleIngestStatus)
 		s.mux.HandleFunc("POST "+prefix+"/memories/{id}/approve", s.handleApproveMemory)
 		s.mux.HandleFunc("POST "+prefix+"/config", s.handleUpdateConfig)
 		s.mux.HandleFunc("GET "+prefix+"/analytics/supersessions", s.handleSupersessionTimeline)
@@ -410,6 +411,22 @@ type browseResult struct {
 	Path    string        `json:"path"`
 	Parent  string        `json:"parent"`
 	Entries []browseEntry `json:"entries"`
+}
+
+// handleIngestStatus checks a file path against the document store and reports
+// whether the file is unchanged (hash matches), changed, or new.
+func (s *Server) handleIngestStatus(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		writeErrorStatus(w, http.StatusBadRequest, errors.New("path required"))
+		return
+	}
+	status, err := s.store.IngestFileStatus(r.Context(), path)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
 }
 
 func (s *Server) handleApproveMemory(w http.ResponseWriter, r *http.Request) {

@@ -159,6 +159,49 @@ func isDoclingIngestFile(path string) bool {
 	return doclingIngestExts[strings.ToLower(filepath.Ext(path))]
 }
 
+// IngestFileStatusResult describes whether a file needs re-ingestion.
+type IngestFileStatusResult struct {
+	Path      string `json:"path"`
+	Status    string `json:"status"` // "new", "unchanged", "changed", "unsupported"
+	DocumentID string `json:"document_id,omitempty"`
+}
+
+// IngestFileStatus checks the current hash of a file against the document store.
+func (s *Store) IngestFileStatus(ctx context.Context, path string) (IngestFileStatusResult, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return IngestFileStatusResult{Path: path, Status: "error"}, err
+	}
+	if !isTextIngestFile(abs) && !isDoclingIngestFile(abs) {
+		return IngestFileStatusResult{Path: abs, Status: "unsupported"}, nil
+	}
+	b, err := os.ReadFile(abs)
+	if err != nil {
+		return IngestFileStatusResult{Path: abs, Status: "error"}, err
+	}
+	sum := sha256.Sum256(b)
+	hash := hex.EncodeToString(sum[:])
+	docID := "doc_" + hash[:32]
+	existing, err := s.GetDocument(ctx, docID)
+	if err != nil {
+		// Check by path to distinguish "changed" from "new"
+		var byPath Document
+		rows, qErr := s.db.QueryContext(ctx, `SELECT id, sha256 FROM documents WHERE path = ? LIMIT 1`, abs)
+		if qErr == nil {
+			defer rows.Close()
+			if rows.Next() {
+				_ = rows.Scan(&byPath.ID, &byPath.SHA256)
+			}
+		}
+		if byPath.ID != "" {
+			return IngestFileStatusResult{Path: abs, Status: "changed", DocumentID: byPath.ID}, nil
+		}
+		return IngestFileStatusResult{Path: abs, Status: "new"}, nil
+	}
+	_ = existing
+	return IngestFileStatusResult{Path: abs, Status: "unchanged", DocumentID: docID}, nil
+}
+
 func ingestParserLabel() string {
 	if p, err := exec.LookPath("docling"); err == nil {
 		version := strings.TrimSpace(string(mustCommandOutput("docling", "--version")))
@@ -189,7 +232,15 @@ func (s *Store) ingestTextFile(ctx context.Context, runID, path string) (Documen
 	}
 	sum := sha256.Sum256(b)
 	hash := hex.EncodeToString(sum[:])
-	doc := Document{ID: "doc_" + hash[:32], IngestionRunID: runID, Path: path, Title: filepath.Base(path), SourceKind: "file", SourceRef: path, SHA256: hash}
+	docID := "doc_" + hash[:32]
+
+	// Dedupe: if the document already exists with this hash, return existing chunks.
+	if existing, err := s.GetDocument(ctx, docID); err == nil && existing.SHA256 == hash {
+		chunks, _ := s.ListChunks(ctx, docID)
+		return existing, chunks, nil
+	}
+
+	doc := Document{ID: docID, IngestionRunID: runID, Path: path, Title: filepath.Base(path), SourceKind: "file", SourceRef: path, SHA256: hash}
 	doc, err = s.UpsertDocument(ctx, doc)
 	if err != nil {
 		return Document{}, nil, err
@@ -214,6 +265,14 @@ func (s *Store) ingestDoclingFile(ctx context.Context, runID, path string) (Docu
 	}
 	sum := sha256.Sum256(b)
 	hash := hex.EncodeToString(sum[:])
+	docID := "doc_" + hash[:32]
+
+	// Dedupe: if the document already exists with this hash, skip Docling conversion.
+	if existing, err := s.GetDocument(ctx, docID); err == nil && existing.SHA256 == hash {
+		chunks, _ := s.ListChunks(ctx, docID)
+		return existing, chunks, nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	tmp, err := os.MkdirTemp("", "llm-memory-docling-*")
@@ -238,7 +297,7 @@ func (s *Store) ingestDoclingFile(ctx context.Context, runID, path string) (Docu
 	if text == "" {
 		return Document{}, nil, errors.New("docling produced empty markdown")
 	}
-	doc := Document{ID: "doc_" + hash[:32], IngestionRunID: runID, Path: path, Title: filepath.Base(path), SourceKind: "file:docling", SourceRef: path, SHA256: hash}
+	doc := Document{ID: docID, IngestionRunID: runID, Path: path, Title: filepath.Base(path), SourceKind: "file:docling", SourceRef: path, SHA256: hash}
 	doc, err = s.UpsertDocument(ctx, doc)
 	if err != nil {
 		return Document{}, nil, err

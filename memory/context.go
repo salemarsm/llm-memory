@@ -22,13 +22,22 @@ type ContextRequest struct {
 	MaxMemories int          `json:"max_memories"`
 }
 
+// ChunkCitation links a memory in context to its source chunk and document.
+type ChunkCitation struct {
+	MemoryID   string `json:"memory_id"`
+	DocumentID string `json:"document_id"`
+	ChunkID    string `json:"chunk_id"`
+	Path       string `json:"path,omitempty"`
+}
+
 type ContextResponse struct {
-	ContextID       string   `json:"context_id"`
-	Context         string   `json:"context"`
-	Items           []Memory `json:"items"`
-	EstimatedTokens int      `json:"estimated_tokens"`
-	BudgetTokens    int      `json:"budget_tokens"`
-	Truncated       bool     `json:"truncated"`
+	ContextID       string          `json:"context_id"`
+	Context         string          `json:"context"`
+	Items           []Memory        `json:"items"`
+	Citations       []ChunkCitation `json:"citations,omitempty"`
+	EstimatedTokens int             `json:"estimated_tokens"`
+	BudgetTokens    int             `json:"budget_tokens"`
+	Truncated       bool            `json:"truncated"`
 }
 
 func (s *Store) BuildContext(ctx context.Context, req ContextRequest) (ContextResponse, error) {
@@ -127,10 +136,26 @@ func (s *Store) BuildContext(ctx context.Context, req ContextRequest) (ContextRe
 		}
 	}
 
+	// Resolve chunk citations for memories sourced from RAG documents.
+	var citations []ChunkCitation
+	for _, m := range selected {
+		if m.Source.Kind == "chunk" && strings.Contains(m.Source.Ref, ":") {
+			parts := strings.SplitN(m.Source.Ref, ":", 2)
+			if len(parts) == 2 {
+				cite := ChunkCitation{MemoryID: m.ID, DocumentID: parts[0], ChunkID: parts[1]}
+				if doc, err := s.GetDocument(ctx, parts[0]); err == nil {
+					cite.Path = doc.Path
+				}
+				citations = append(citations, cite)
+			}
+		}
+	}
+
 	return ContextResponse{
 		ContextID:       contextID,
 		Context:         strings.TrimSpace(b.String()),
 		Items:           selected,
+		Citations:       citations,
 		EstimatedTokens: used,
 		BudgetTokens:    budget,
 		Truncated:       truncated,

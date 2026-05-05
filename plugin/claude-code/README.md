@@ -7,7 +7,7 @@ Persistent memory for your Claude Code agent. Bundles the `ginko` MCP server, th
 Inside a Claude Code session:
 
 ```
-/plugin marketplace add ginko
+/plugin marketplace add salemarsm/llm-memory
 /plugin install ginko
 ```
 

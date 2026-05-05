@@ -31,7 +31,7 @@ ginko setup claude-code
 Or via the Claude Code plugin marketplace (recommended):
 
 ```text
-/plugin marketplace add ginko
+/plugin marketplace add salemarsm/llm-memory
 /plugin install ginko
 ```
 

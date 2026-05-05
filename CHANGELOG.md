@@ -14,7 +14,7 @@ All notable changes to this project are documented here.
   project-scoped equivalent) with merge, dry-run, and backup support.
 - Marketplace manifest at `.claude-plugin/marketplace.json` exposing the
   `ginko` plugin. Install with:
-      /plugin marketplace add ginko
+      /plugin marketplace add salemarsm/llm-memory
       /plugin install ginko
 - Default data directory moved to `~/.ginko/`. One-time transparent migration
   from `~/.llm-memory/` if present; old files are preserved.

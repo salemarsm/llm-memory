@@ -92,9 +92,12 @@ Goal: make the project safe and easy enough for real local agent workflows.
 
 ### Exit criteria
 
-- New user can install and run locally in under 5 minutes.
-- HTTP API is not unauthenticated by default when exposed beyond loopback.
-- CI verifies build/test for every PR.
+- [ ] `curl -fsSL .../install.sh | bash` completes and `ginko version` works within 5 minutes on a clean machine.
+- [ ] `ginko setup claude-code` writes a valid `settings.json` and MCP server responds.
+- [ ] `ginko serve` starts without errors and `/healthz` returns 200.
+- [ ] HTTP API returns 401 when `auth_token` is set and no Bearer token is provided.
+- [ ] CI passes `make check` on every push to main.
+- [ ] `ginko doctor` reports no errors on a correctly installed setup.
 
 ## v0.3 — Agent integration quality
 
@@ -123,8 +126,12 @@ Goal: make memory feel transparent in Claude Code, Codex-like agents, OpenClaw, 
 
 ### Exit criteria
 
-- User can connect at least one MCP-capable agent without hand-editing large JSON blocks.
-- Transparent memory flow is documented and reproducible.
+- [ ] `ginko integrate claude-code` configures MCP without manual JSON editing.
+- [ ] `memory_remember` with `dry_run=true` returns preview without persisting.
+- [ ] MCP contract tests pass for all declared tools.
+- [ ] Agent can call `memory_context` → work → `memory_suggest` → `memory_remember` in one session.
+- [ ] Session summary is saved on `memory_session_end` and recovered on next `memory_session_start`.
+- [ ] `docs/agents/` covers claude-code, codex, and openclaw with working examples.
 
 ## v0.4 — Governance and memory quality
 
@@ -157,8 +164,12 @@ Goal: improve trust, auditability, and correctness of stored memory.
 
 ### Exit criteria
 
-- Agent can propose memory without silently polluting the store.
-- User can review, approve, reject, supersede, and audit memory changes.
+- [ ] Agent cannot save a memory without it appearing in the audit log.
+- [ ] GUI shows a pending approval queue; user can approve, reject, or supersede each candidate.
+- [ ] `memory_remember` with a conflicting subject/content triggers a supersession prompt.
+- [ ] Superseded memory does not appear in `memory_context` output.
+- [ ] Sensitive-data detector rejects memories containing patterns matching secrets (API keys, tokens).
+- [ ] `ginko doctor` reports no errors after a full governance workflow.
 
 ## v0.5 — RAG bridge with Docling
 
@@ -188,8 +199,11 @@ Goal: ingest documents as evidence and generate memory candidates from them.
 
 ### Exit criteria
 
-- User can import a PDF/DOCX/HTML document from the GUI or CLI and get searchable evidence plus candidate memories.
-- Every imported document is traceable from source file → ingestion run → document record → chunks → candidate memories/citations.
+- [ ] `ginko ingest document.pdf` produces chunks searchable via `/api/chunks/search`.
+- [ ] GUI Browse + Ingest flow works end-to-end for `.md`, `.pdf`, and `.html` files.
+- [ ] Every ingestion run is traceable: source path → run ID → document ID → chunk IDs → candidate memory IDs.
+- [ ] Re-ingesting an unchanged file is a no-op (hash dedupe).
+- [ ] Memory candidates extracted from chunks include `source.kind=chunk` and `source.ref=doc_id:chunk_id`.
 
 ## v0.6 — Retrieval quality
 

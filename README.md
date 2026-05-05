@@ -23,6 +23,8 @@
 
 > Persistent memory for your Claude Code agent. Like ginkgo biloba — but it actually works.
 
+> **Note:** Ginko is unrelated to the [Ginkgo](https://onsi.github.io/ginkgo/) Go testing framework.
+
 ```bash
 go install github.com/salemarsm/llm-memory/cmd/ginko@latest
 ginko setup claude-code

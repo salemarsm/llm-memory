@@ -1,4 +1,4 @@
-.PHONY: all build test check clean install snapshot
+.PHONY: all build test check e2e clean install snapshot
 
 GO ?= go
 BIN_DIR ?= bin
@@ -28,6 +28,9 @@ test:
 check:
 	$(GO) test ./...
 	$(GO) build ./cmd/...
+
+e2e:
+	$(GO) test -v -run TestE2E .
 
 install:
 	$(GO) install -ldflags "$(LDFLAGS)" ./cmd/ginko

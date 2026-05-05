@@ -82,48 +82,138 @@ func initProject(home string) error {
 }
 
 func doctor(home string) error {
-	fmt.Println("llm-memory doctor")
+	fmt.Printf("llm-memory doctor  (version %s)\n", version.Version)
 	fmt.Println("home:", home)
-	cfgPath := configPath(home)
-	if _, err := os.Stat(home); err != nil {
-		fmt.Printf("✗ home dir: %s\n  fix: llm-memory -home %q init\n", err, home)
-	} else {
-		fmt.Println("✓ home dir:", home)
-	}
-	if _, err := os.Stat(cfgPath); err != nil {
-		fmt.Printf("✗ config: %s\n  fix: llm-memory -home %q init\n", err, home)
-	} else {
-		fmt.Println("✓ config:", cfgPath)
-	}
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		fmt.Printf("✗ config valid: %s\n  fix: edit %s or run llm-memory -home %q init on a clean home\n", err, cfgPath, home)
-		cfg = config.Default()
-	} else {
-		fmt.Println("✓ config valid")
-	}
-	if config.IsLoopbackAddr(cfg.Server.Addr) {
-		fmt.Println("✓ auth policy: loopback no-auth allowed")
-	} else if _, ok := cfg.Server.BearerToken(); ok {
-		fmt.Println("✓ auth policy: non-loopback bind has bearer token")
-	} else {
-		fmt.Println("✗ auth policy: non-loopback bind requires server.auth_token_env or server.auth_token")
-	}
-	for _, bin := range []string{"memserver", "memmcp", "memctl"} {
-		p, err := findSibling(bin)
-		if err != nil {
-			fmt.Printf("✗ %s: %s\n  fix: run make build or install release artifacts\n", bin, err)
+	errors := 0
+	warn := 0
+
+	check := func(ok bool, pass, fail string) {
+		if ok {
+			fmt.Println("✓", pass)
 		} else {
-			fmt.Printf("✓ %s: %s\n", bin, p)
+			fmt.Println("✗", fail)
+			errors++
 		}
 	}
-	if canListen(cfg.Server.Addr) {
-		fmt.Println("✓ port", cfg.Server.Addr, "available")
+	notice := func(ok bool, pass, issue, fix string) {
+		if ok {
+			fmt.Println("✓", pass)
+		} else {
+			fmt.Println("!", issue)
+			fmt.Println(" ", fix)
+			warn++
+		}
+	}
+
+	// --- directories and config ---
+	_, homeErr := os.Stat(home)
+	check(homeErr == nil, "home dir: "+home,
+		"home dir missing: "+home+"\n  fix: llm-memory init")
+
+	cfgPath := configPath(home)
+	_, cfgErr := os.Stat(cfgPath)
+	check(cfgErr == nil, "config: "+cfgPath,
+		"config missing: "+cfgPath+"\n  fix: llm-memory init")
+
+	cfg, loadErr := config.Load(cfgPath)
+	check(loadErr == nil, "config valid",
+		"config invalid: "+fmt.Sprint(loadErr)+"\n  fix: edit "+cfgPath+" or run llm-memory init")
+	if loadErr != nil {
+		cfg = config.Default()
+	}
+
+	// --- database ---
+	dbPath := cfg.Database.Path
+	_, dbErr := os.Stat(dbPath)
+	check(dbErr == nil, "database exists: "+dbPath,
+		"database not found: "+dbPath+"\n  fix: start memserver once to create the database")
+
+	if dbErr == nil {
+		// write permission
+		f, wErr := os.OpenFile(dbPath, os.O_WRONLY|os.O_APPEND, 0)
+		if wErr == nil {
+			f.Close()
+			fmt.Println("✓ database writable")
+		} else {
+			fmt.Printf("✗ database not writable: %v\n  fix: check file permissions on %s\n", wErr, dbPath)
+			errors++
+		}
+
+		// schema version
+		if schemaVer, svErr := readSchemaVersion(dbPath); svErr == nil {
+			fmt.Printf("✓ schema version: %d\n", schemaVer)
+		} else {
+			fmt.Printf("! schema version unknown: %v\n", svErr)
+			warn++
+		}
+	}
+
+	// --- auth policy ---
+	if config.IsLoopbackAddr(cfg.Server.Addr) {
+		fmt.Println("✓ auth policy: loopback bind (no token required)")
+	} else if _, ok := cfg.Server.BearerToken(); ok {
+		fmt.Println("✓ auth policy: non-loopback bind with bearer token")
 	} else {
-		fmt.Println("! port", cfg.Server.Addr, "unavailable or already in use")
-		fmt.Println("  fix: stop the running service or change server.addr in", cfgPath)
+		fmt.Println("✗ auth policy: non-loopback bind requires auth_token or auth_token_env")
+		errors++
+	}
+
+	// --- sibling binaries ---
+	for _, bin := range []string{"memserver", "memmcp", "memctl"} {
+		p, binErr := findSibling(bin)
+		check(binErr == nil, bin+": "+p,
+			bin+" not found\n  fix: run make install or download release artifacts")
+	}
+
+	// --- port ---
+	notice(canListen(cfg.Server.Addr),
+		"port "+cfg.Server.Addr+" available",
+		"port "+cfg.Server.Addr+" in use (server may already be running)",
+		"fix: stop existing server or change server.addr in "+cfgPath)
+
+	// --- Claude Code ---
+	claudeSettings := filepath.Join(mustHomeDir(), ".claude", "settings.json")
+	if _, err := os.Stat(claudeSettings); err == nil {
+		b, _ := os.ReadFile(claudeSettings)
+		if strings.Contains(string(b), `"ginko"`) {
+			fmt.Println("✓ Claude Code: ginko MCP server configured")
+		} else {
+			fmt.Println("! Claude Code: settings.json found but ginko not configured")
+			fmt.Println("  fix: ginko setup claude-code")
+			warn++
+		}
+	} else {
+		fmt.Println("- Claude Code: settings.json not found (skip if not using Claude Code)")
+	}
+
+	// --- summary ---
+	fmt.Println()
+	if errors == 0 && warn == 0 {
+		fmt.Println("All checks passed.")
+	} else {
+		fmt.Printf("%d error(s), %d warning(s)\n", errors, warn)
 	}
 	return nil
+}
+
+func readSchemaVersion(dbPath string) (int, error) {
+	// Use sqlite3 CLI if available for a quick read without importing the driver
+	out, err := exec.Command("sqlite3", dbPath,
+		"SELECT MAX(version) FROM schema_migrations;").Output()
+	if err != nil {
+		return 0, err
+	}
+	var v int
+	fmt.Sscanf(strings.TrimSpace(string(out)), "%d", &v)
+	return v, nil
+}
+
+func mustHomeDir() string {
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return h
 }
 
 func tokenCommand(home string, args []string) error {

@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/salemarsm/llm-memory/config"
 	"github.com/salemarsm/llm-memory/internal/version"
 	"github.com/salemarsm/llm-memory/memory"
 )
@@ -40,10 +41,12 @@ type toolCall struct {
 type mcpServer struct {
 	store   *memory.Store
 	project string
+	profile config.AgentProfile
 }
 
 func main() {
 	db := flag.String("db", envDefault("LLM_MEMORY_DB", "./memory.db"), "SQLite database path")
+	agentName := flag.String("agent", envDefault("GINKO_AGENT", "claude-code"), "agent name for profile lookup")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -58,7 +61,21 @@ func main() {
 	}
 	defer store.Close()
 
-	s := &mcpServer{store: store, project: memory.DetectProject("")}
+	var profile config.AgentProfile
+	if cfg, err := config.Load(config.DefaultConfigPath()); err == nil {
+		if cfg.Agents != nil {
+			if p, ok := cfg.Agents[*agentName]; ok {
+				profile = p
+			}
+		}
+	}
+
+	project := memory.DetectProject("")
+	if profile.DefaultSubject != "" && project == "" {
+		project = profile.DefaultSubject
+	}
+
+	s := &mcpServer{store: store, project: project, profile: profile}
 	s.run()
 }
 
@@ -121,6 +138,12 @@ func (s *mcpServer) callTool(call toolCall) (string, error) {
 			return "", err
 		}
 		s.defaultProjectContext(&req.Project, &req.Subject)
+		if req.MaxTokens == 0 && s.profile.MaxContextTokens > 0 {
+			req.MaxTokens = s.profile.MaxContextTokens
+		}
+		if len(req.Scopes) == 0 && s.profile.DefaultScope != "" {
+			req.Scopes = []memory.Scope{memory.Scope(s.profile.DefaultScope)}
+		}
 		out, err := s.store.BuildContext(ctx, req)
 		return pretty(out), err
 	case "memory_remember":
@@ -159,6 +182,18 @@ func (s *mcpServer) callTool(call toolCall) (string, error) {
 		if err == nil {
 			_ = s.store.AppendEvent(ctx, memory.Event{MemoryID: &out.ID, Kind: "memory.upserted", Payload: out.ID, Source: memory.Source{Kind: "mcp", Ref: "memory_remember"}})
 		}
+		return pretty(out), err
+	case "memory_get":
+		var req struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(call.Arguments, &req); err != nil {
+			return "", err
+		}
+		if req.ID == "" {
+			return "", fmt.Errorf("id is required")
+		}
+		out, err := s.store.GetMemory(ctx, req.ID)
 		return pretty(out), err
 	case "memory_timeline":
 		var req struct {
@@ -255,6 +290,11 @@ func tools() []map[string]any {
 			"name":        "memory_search",
 			"description": "Search raw memories. Prefer memory_context for normal prompt injection because it is token-budgeted.",
 			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"text": map[string]string{"type": "string"}, "subject": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}},
+		},
+		{
+			"name":        "memory_get",
+			"description": "Fetch the full detail of a single memory by ID. Use when memory_search or memory_context returns an item you want to inspect fully.",
+			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"id": map[string]string{"type": "string", "description": "Memory ID (mem_...)"}}, "required": []string{"id"}},
 		},
 		{
 			"name":        "memory_session_start",

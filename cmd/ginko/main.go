@@ -22,6 +22,7 @@ Commands:
   serve         Start HTTP API server
   setup         Configure an agent's MCP config (claude-code)
   upgrade       Upgrade ginko to the latest release
+  integrate     Add ginko to an agent workflow (claude-code, openclaw, codex)
   save          Save a memory
   search        Search memories
   context       Recent context for a subject
@@ -85,6 +86,9 @@ func main() {
 		return
 	case "upgrade":
 		doUpgrade(rest)
+		return
+	case "integrate":
+		doIntegrate(rest)
 		return
 	}
 

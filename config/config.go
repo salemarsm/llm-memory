@@ -13,6 +13,21 @@ type Config struct {
 	Database  DatabaseConfig  `json:"database"`
 	LLM       LLMConfig       `json:"llm"`
 	Embedding EmbeddingConfig `json:"embedding"`
+	Agents    AgentsConfig    `json:"agents,omitempty"`
+}
+
+// AgentsConfig holds per-agent defaults. Each entry is keyed by agent name
+// (e.g. "claude-code", "codex") and overrides global defaults for that agent.
+type AgentsConfig map[string]AgentProfile
+
+type AgentProfile struct {
+	// MaxContextTokens caps the token budget for memory_context calls from this agent.
+	// 0 means use the request value or the global default (800).
+	MaxContextTokens int `json:"max_context_tokens,omitempty"`
+	// DefaultSubject is used when the agent does not supply a subject.
+	DefaultSubject string `json:"default_subject,omitempty"`
+	// DefaultScope filters memories to this scope by default.
+	DefaultScope string `json:"default_scope,omitempty"`
 }
 
 type ServerConfig struct {

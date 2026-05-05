@@ -21,6 +21,7 @@ Commands:
   mcp           Start MCP server (stdio)
   serve         Start HTTP API server
   setup         Configure an agent's MCP config (claude-code)
+  upgrade       Upgrade ginko to the latest release
   save          Save a memory
   search        Search memories
   context       Recent context for a subject
@@ -81,6 +82,9 @@ func main() {
 		os.Exit(2)
 	case "setup":
 		runSetup(rest)
+		return
+	case "upgrade":
+		doUpgrade(rest)
 		return
 	}
 

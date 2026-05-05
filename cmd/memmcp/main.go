@@ -124,10 +124,14 @@ func (s *mcpServer) callTool(call toolCall) (string, error) {
 		out, err := s.store.BuildContext(ctx, req)
 		return pretty(out), err
 	case "memory_remember":
-		var m memory.Memory
-		if err := json.Unmarshal(call.Arguments, &m); err != nil {
+		var req struct {
+			memory.Memory
+			DryRun bool `json:"dry_run"`
+		}
+		if err := json.Unmarshal(call.Arguments, &req); err != nil {
 			return "", err
 		}
+		m := req.Memory
 		m.Content = memory.StripPrivateTags(m.Content)
 		if m.Source.Kind == "" {
 			m.Source = memory.Source{Kind: "mcp", Ref: "memory_remember"}
@@ -143,6 +147,13 @@ func (s *mcpServer) callTool(call toolCall) (string, error) {
 		}
 		if m.EmbeddingRefs == nil {
 			m.EmbeddingRefs = memory.EmbeddingRefs{}
+		}
+		if req.DryRun {
+			type dryRunResult struct {
+				DryRun  bool          `json:"dry_run"`
+				Preview memory.Memory `json:"preview"`
+			}
+			return pretty(dryRunResult{DryRun: true, Preview: m}), nil
 		}
 		out, err := s.store.UpsertMemory(ctx, m)
 		if err == nil {
@@ -237,8 +248,8 @@ func tools() []map[string]any {
 		},
 		{
 			"name":        "memory_remember",
-			"description": "Store an approved durable memory. Use for explicit preferences, stable facts, project decisions, tasks, and corrections. Avoid casual or sensitive content unless confirmed.",
-			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"type": map[string]string{"type": "string"}, "subject": map[string]string{"type": "string"}, "content": map[string]string{"type": "string"}, "scope": map[string]string{"type": "string"}, "confidence": map[string]string{"type": "number"}, "tags": map[string]any{"type": "array", "items": map[string]string{"type": "string"}}}, "required": []string{"type", "content"}},
+			"description": "Store an approved durable memory. Use for explicit preferences, stable facts, project decisions, tasks, and corrections. Avoid casual or sensitive content unless confirmed. Set dry_run=true to preview what would be saved without persisting.",
+			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"type": map[string]string{"type": "string"}, "subject": map[string]string{"type": "string"}, "content": map[string]string{"type": "string"}, "scope": map[string]string{"type": "string"}, "confidence": map[string]string{"type": "number"}, "tags": map[string]any{"type": "array", "items": map[string]string{"type": "string"}}, "dry_run": map[string]any{"type": "boolean", "description": "If true, return the memory that would be saved without persisting it."}}, "required": []string{"type", "content"}},
 		},
 		{
 			"name":        "memory_search",

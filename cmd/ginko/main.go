@@ -160,40 +160,73 @@ func findSibling(name string) (string, error) {
 }
 
 func runSetup(args []string) {
-	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
+	if len(args) == 0 {
+		doSetupUnified(args)
+		return
+	}
+	if args[0] == "--help" || args[0] == "-h" {
 		fmt.Print(setupUsage)
+		return
+	}
+	// If first arg looks like a flag, run the unified interactive setup
+	if strings.HasPrefix(args[0], "-") {
+		doSetupUnified(args)
 		return
 	}
 	agent := args[0]
 	switch agent {
 	case "claude-code":
 		setupClaudeCode(args[1:])
+	case "openclaw":
+		dryRun := hasFlag(args[1:], "--dry-run")
+		noBackup := hasFlag(args[1:], "--no-backup")
+		if err := setupOpenClaw(dryRun, noBackup); err != nil {
+			fmt.Fprintf(os.Stderr, "ginko setup: %v\n", err)
+			os.Exit(1)
+		}
+		if !noBackup && !dryRun {
+			fmt.Println()
+			fmt.Println("Restart OpenClaw to load the MCP server.")
+			if !hasFlag(args[1:], "--no-autostart") {
+				askAndInstallAutostart()
+			}
+		}
+	case "all":
+		doSetupUnified(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "ginko setup: unsupported agent %q\n", agent)
-		fmt.Fprintln(os.Stderr, "Supported agents: claude-code")
+		fmt.Fprintln(os.Stderr, "Supported agents: claude-code, openclaw, all (interactive)")
 		os.Exit(2)
 	}
 }
 
-const setupUsage = `ginko setup — configure an agent to use ginko
+const setupUsage = `ginko setup — configure agents to share ginko memory
 
 Usage:
-  ginko setup <agent> [flags]
+  ginko setup                     Interactive: detect and configure agents
+  ginko setup all                 Configure all detected agents
+  ginko setup <agent> [flags]     Configure a specific agent
 
 Agents:
   claude-code     Add ginko MCP server to Claude Code settings
+  openclaw        Add ginko MCP server to OpenClaw settings
+  all             Interactive setup for all detected agents
 
 Flags:
-  --scope user|project    Where to install (default: user)
+  --scope user|project    Where to install claude-code (default: user)
   --dry-run               Show planned changes, do not write
   --no-backup             Skip backup of existing settings
   --no-autostart          Skip autostart prompt for ginko serve
-  --plugin                Print plugin marketplace install instructions
+  --plugin                Print Claude Code plugin marketplace instructions
+
+All agents share the same database: ~/.ginko/ginko.db
 
 Examples:
+  ginko setup                           # interactive, detects agents
+  ginko setup all                       # configure all detected agents
   ginko setup claude-code
-  ginko setup claude-code --scope project --dry-run
-  ginko setup claude-code --plugin
+  ginko setup openclaw --dry-run
+  ginko setup claude-code --scope project
 `
 
 func setupClaudeCode(args []string) {

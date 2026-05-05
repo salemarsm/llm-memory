@@ -178,6 +178,10 @@ func (s *mcpServer) callTool(call toolCall) (string, error) {
 			}
 			return pretty(dryRunResult{DryRun: true, Preview: m}), nil
 		}
+		// Apply per-scope write policy: save as pending if scope requires approval.
+		if s.profile.WritePolicy.ScopeRequiresApproval(string(m.Scope)) {
+			m.Status = memory.StatusPending
+		}
 		result, err := s.store.UpsertMemoryFull(ctx, m)
 		if err != nil {
 			return "", err

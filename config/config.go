@@ -28,6 +28,28 @@ type AgentProfile struct {
 	DefaultSubject string `json:"default_subject,omitempty"`
 	// DefaultScope filters memories to this scope by default.
 	DefaultScope string `json:"default_scope,omitempty"`
+	// WritePolicy controls whether saves are automatic or require confirmation per scope.
+	WritePolicy WritePolicy `json:"write_policy,omitempty"`
+}
+
+// WritePolicy configures per-scope save behaviour for an agent.
+type WritePolicy struct {
+	// AutoSave lists scopes where memory_remember saves immediately (default for all scopes).
+	AutoSave []string `json:"auto_save,omitempty"`
+	// RequireApproval lists scopes where memory_remember saves as status=pending
+	// and waits for human approval (e.g. ["global"] to gate all global memories).
+	RequireApproval []string `json:"require_approval,omitempty"`
+}
+
+// ScopeRequiresApproval returns true if the given scope requires human approval
+// before a memory is made active.
+func (p WritePolicy) ScopeRequiresApproval(scope string) bool {
+	for _, s := range p.RequireApproval {
+		if s == scope || s == "*" {
+			return true
+		}
+	}
+	return false
 }
 
 type ServerConfig struct {

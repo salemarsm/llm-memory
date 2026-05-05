@@ -65,11 +65,12 @@ type Memory struct {
 	Status        MemoryStatus  `json:"status,omitempty"`
 }
 
-// UpsertResult is returned by UpsertMemory. It includes the saved memory
-// plus any detected conflicts with existing memories on the same topic.
+// UpsertResult is returned by UpsertMemoryFull. It includes the saved memory,
+// potential conflicts (same subject+type), and near-duplicates (similar content).
 type UpsertResult struct {
-	Memory    Memory   `json:"memory"`
-	Conflicts []Memory `json:"conflicts,omitempty"`
+	Memory     Memory   `json:"memory"`
+	Conflicts  []Memory `json:"conflicts,omitempty"`
+	Duplicates []Memory `json:"duplicates,omitempty"`
 }
 
 // Event is append-only raw history. Canonical memories may be derived from it.

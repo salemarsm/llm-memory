@@ -16,6 +16,7 @@ import (
 	"github.com/salemarsm/llm-memory/memory"
 )
 
+
 type Server struct {
 	store *memory.Store
 	cfg   config.Config
@@ -82,6 +83,8 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("POST "+prefix+"/documents/{id}/suggest", s.handleDocumentSuggest)
 		s.mux.HandleFunc("GET "+prefix+"/browse", s.handleBrowse)
 		s.mux.HandleFunc("POST "+prefix+"/memories/{id}/approve", s.handleApproveMemory)
+		s.mux.HandleFunc("POST "+prefix+"/config", s.handleUpdateConfig)
+		s.mux.HandleFunc("GET "+prefix+"/analytics/supersessions", s.handleSupersessionTimeline)
 	}
 }
 
@@ -417,6 +420,51 @@ func (s *Server) handleApproveMemory(w http.ResponseWriter, r *http.Request) {
 	}
 	s.appendEvent(r, memory.Event{MemoryID: &id, Kind: "memory.approved", Payload: id, Source: memory.Source{Kind: "api", Ref: r.RemoteAddr}})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "approved", "id": id})
+}
+
+func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
+	var patch config.Config
+	if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
+		writeErrorStatus(w, http.StatusBadRequest, err)
+		return
+	}
+	// Merge patch into current config (preserve database path and auth)
+	current := s.cfg
+	if patch.Server.Addr != "" {
+		current.Server.Addr = patch.Server.Addr
+	}
+	if patch.LLM.Provider != "" {
+		current.LLM = patch.LLM
+	}
+	if patch.Embedding.Provider != "" {
+		current.Embedding = patch.Embedding
+	}
+	if err := current.Validate(); err != nil {
+		writeErrorStatus(w, http.StatusBadRequest, err)
+		return
+	}
+	cfgPath := config.DefaultConfigPath()
+	b, err := json.MarshalIndent(current, "", "  ")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := os.WriteFile(cfgPath, append(b, '\n'), 0o644); err != nil {
+		writeError(w, err)
+		return
+	}
+	s.cfg = current
+	writeJSON(w, http.StatusOK, map[string]string{"status": "saved", "path": cfgPath})
+}
+
+func (s *Server) handleSupersessionTimeline(w http.ResponseWriter, r *http.Request) {
+	limit := atoiDefault(r.URL.Query().Get("limit"), 50)
+	rows, err := s.store.SupersessionTimeline(r.Context(), limit)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rows)
 }
 
 func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {

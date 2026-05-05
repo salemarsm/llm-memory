@@ -209,7 +209,8 @@ func (s *Store) UpsertMemoryFull(ctx context.Context, m Memory) (UpsertResult, e
 	}
 
 	conflicts, _ := s.FindConflicts(ctx, m)
-	return UpsertResult{Memory: m, Conflicts: conflicts}, nil
+	duplicates, _ := s.FindDuplicates(ctx, m)
+	return UpsertResult{Memory: m, Conflicts: conflicts, Duplicates: duplicates}, nil
 }
 
 // supersedeByTopicKey marks any existing active memory with the same topic_key as superseded.
@@ -238,6 +239,42 @@ func (s *Store) supersedeByTopicKey(ctx context.Context, m *Memory) error {
 		}
 	}
 	return nil
+}
+
+// FindDuplicates returns active memories with the same subject and highly similar
+// content (FTS5 match on key terms). Excludes m itself.
+func (s *Store) FindDuplicates(ctx context.Context, m Memory) ([]Memory, error) {
+	if m.Subject == "" || m.Content == "" {
+		return nil, nil
+	}
+	// Build a short FTS query from the first ~60 chars of content
+	terms := ftsQuery(m.Content)
+	if terms == "" {
+		return nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT m.id, m.type, m.subject, m.content, m.source_kind, m.source_ref, m.scope, m.confidence,
+		 m.created_at, m.updated_at, m.valid_from, m.valid_until, m.supersedes_id, m.superseded_by,
+		 m.tags_json, m.embedding_refs_json, COALESCE(m.topic_key,''), COALESCE(m.status,'active')
+		 FROM memories m
+		 JOIN memories_fts ON memories_fts.id = m.id
+		 WHERE memories_fts MATCH ? AND m.subject = ? AND m.id != ?
+		   AND m.superseded_by IS NULL AND (m.status IS NULL OR m.status = 'active')
+		 ORDER BY bm25(memories_fts) ASC LIMIT 3`,
+		terms, m.Subject, m.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Memory
+	for rows.Next() {
+		mem, err := scanMemoryFull(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, mem)
+	}
+	return out, rows.Err()
 }
 
 // FindConflicts returns active memories with the same subject and type as m,
@@ -487,6 +524,46 @@ func (s *Store) Forget(ctx context.Context, id string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// SupersessionTimelineEntry represents one supersession event.
+type SupersessionTimelineEntry struct {
+	OldID     string    `json:"old_id"`
+	NewID     string    `json:"new_id"`
+	Subject   string    `json:"subject"`
+	OldType   string    `json:"old_type"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// SupersessionTimeline returns recent supersession events ordered by time desc.
+func (s *Store) SupersessionTimeline(ctx context.Context, limit int) ([]SupersessionTimelineEntry, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT old.id, new.id, new.subject, old.type, new.created_at
+		 FROM memories old
+		 JOIN memories new ON new.supersedes_id = old.id
+		 ORDER BY new.created_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SupersessionTimelineEntry
+	for rows.Next() {
+		var e SupersessionTimelineEntry
+		var created string
+		if err := rows.Scan(&e.OldID, &e.NewID, &e.Subject, &e.OldType, &created); err != nil {
+			return nil, err
+		}
+		t, err := parseTime(created)
+		if err != nil {
+			return nil, err
+		}
+		e.CreatedAt = t
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }
 
 // ApproveMemory transitions a pending memory to active status.

@@ -77,8 +77,49 @@ func (s *Store) MemoryUsageStats(ctx context.Context, limit int) (map[string]Mem
 }
 
 type MemoryUsageRow struct {
-	Usage MemoryUsage `json:"usage"`
-	Item  Memory      `json:"memory"`
+	Usage        MemoryUsage `json:"usage"`
+	Item         Memory      `json:"memory"`
+	QualityScore float64     `json:"quality_score"`
+}
+
+// QualityScore computes a 0–1 score combining confidence, usage, feedback, and recency.
+// Higher = more valuable, more used, more recent.
+func QualityScore(m Memory, u MemoryUsage) float64 {
+	score := m.Confidence * 0.30
+
+	// Usage contribution (capped at 10 uses = full credit)
+	usageScore := float64(u.ContextUses) / 10.0
+	if usageScore > 1.0 {
+		usageScore = 1.0
+	}
+	score += usageScore * 0.35
+
+	// Feedback (useful vs useless votes)
+	totalVotes := u.UsefulVotes + u.UselessVotes
+	if totalVotes > 0 {
+		score += (float64(u.UsefulVotes) / float64(totalVotes)) * 0.20
+	}
+
+	// Provenance bonus (non-trivial source)
+	if m.Source.Kind != "" && m.Source.Kind != "unknown" && m.Source.Kind != "gui" {
+		score += 0.10
+	}
+
+	// Recency penalty: lose up to 0.05 per 90 days of age
+	ageDays := time.Since(m.UpdatedAt).Hours() / 24
+	recencyPenalty := (ageDays / 90.0) * 0.05
+	if recencyPenalty > 0.15 {
+		recencyPenalty = 0.15
+	}
+	score -= recencyPenalty
+
+	if score < 0 {
+		return 0
+	}
+	if score > 1 {
+		return 1
+	}
+	return score
 }
 
 func (s *Store) ListMemoryUsage(ctx context.Context, q Query, eventLimit int) ([]MemoryUsageRow, error) {
@@ -94,7 +135,11 @@ func (s *Store) ListMemoryUsage(ctx context.Context, q Query, eventLimit int) ([
 	for _, item := range items {
 		st := stats[item.ID]
 		st.MemoryID = item.ID
-		rows = append(rows, MemoryUsageRow{Usage: st, Item: item})
+		rows = append(rows, MemoryUsageRow{
+			Usage:        st,
+			Item:         item,
+			QualityScore: QualityScore(item, st),
+		})
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
 		if rows[i].Usage.ContextUses != rows[j].Usage.ContextUses {

@@ -177,6 +177,7 @@ Flags:
   --scope user|project    Where to install (default: user)
   --dry-run               Show planned changes, do not write
   --no-backup             Skip backup of existing settings
+  --no-autostart          Skip autostart prompt for ginko serve
   --plugin                Print plugin marketplace install instructions
 
 Examples:

@@ -17,6 +17,7 @@ func doSetupClaudeCode(args []string) {
 	dryRun := fs.Bool("dry-run", false, "print planned changes; do not write")
 	noBackup := fs.Bool("no-backup", false, "do not back up existing settings file")
 	plugin := fs.Bool("plugin", false, "print plugin marketplace instructions instead of writing JSON")
+	noAutostart := fs.Bool("no-autostart", false, "skip autostart prompt for ginko serve")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -75,6 +76,10 @@ func doSetupClaudeCode(args []string) {
 	fmt.Printf("ginko setup complete (%s) — %s\n", action, target)
 	fmt.Println()
 	fmt.Println("Restart Claude Code to load the MCP server.")
+
+	if !*noAutostart {
+		askAndInstallAutostart()
+	}
 }
 
 func normalizeClaudeCodeSetupArgs(args []string) []string {

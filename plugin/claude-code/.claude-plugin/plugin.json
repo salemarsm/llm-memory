@@ -4,7 +4,7 @@
   "description": "Persistent memory for your Claude Code agent. Like ginkgo biloba — but it actually works. Backed by SQLite, FTS5, and an auditable canonical memory store.",
   "hooks": {},
   "author": {
-    "name": "Rafael Salem",
+    "name": "Rafael Salema Marques",
     "url": "https://github.com/salemarsm"
   },
   "homepage": "https://github.com/salemarsm/llm-memory",

@@ -94,6 +94,8 @@ func main() {
 	switch cmd {
 	case "mcp":
 		args = rewriteMCPArgs(rest)
+	case "serve":
+		args = rewriteServeArgs(rest)
 	case "save":
 		args = rewriteSaveArgs(rest)
 	case "context":
@@ -243,6 +245,19 @@ func rewriteSaveArgs(args []string) []string {
 	out = append(out, "remember")
 	out = append(out, content...)
 	return out
+}
+
+func rewriteServeArgs(args []string) []string {
+	for _, a := range args {
+		if a == "-config" || a == "--config" || strings.HasPrefix(a, "-config=") || strings.HasPrefix(a, "--config=") {
+			return args
+		}
+	}
+	cfgPath := config.DefaultConfigPath()
+	if _, err := os.Stat(cfgPath); err == nil {
+		return append([]string{"-config", cfgPath}, args...)
+	}
+	return args
 }
 
 func rewriteContextArgs(args []string) []string {

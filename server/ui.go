@@ -1,10 +1,21 @@
 package server
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(indexHTML))
+	token, hasToken := s.cfg.Server.BearerToken()
+	if !hasToken {
+		_, _ = w.Write([]byte(indexHTML))
+		return
+	}
+	// Inject the bearer token so the in-page JS can authenticate API calls.
+	// Safe because the server only binds to loopback.
+	snippet := `<script>window.__ginko_token="` + token + `";</script>`
+	_, _ = w.Write([]byte(strings.Replace(indexHTML, "</head>", snippet+"</head>", 1)))
 }
 
 const indexHTML = `<!doctype html>
@@ -70,7 +81,7 @@ const indexHTML = `<!doctype html>
 
 <script>
 let lastRows=[];
-async function api(path,opt={}){const r=await fetch(path,{headers:{'content-type':'application/json'},...opt});const j=await r.json().catch(()=>null);if(!r.ok)throw new Error((j&&j.error)||r.statusText);return j}
+async function api(path,opt={}){const h={'content-type':'application/json'};if(window.__ginko_token)h['Authorization']='Bearer '+window.__ginko_token;const r=await fetch(path,{headers:h,...opt});const j=await r.json().catch(()=>null);if(!r.ok)throw new Error((j&&j.error)||r.statusText);return j}
 function val(id){return document.getElementById(id).value.trim()}
 function qs(){const p=new URLSearchParams();if(val('q'))p.set('q',val('q'));if(val('subjectFilter'))p.set('subject',val('subjectFilter'));if(val('typeFilter'))p.set('type',val('typeFilter'));if(val('scopeFilter'))p.set('scope',val('scopeFilter'));p.set('limit','300');return p.toString()}
 async function loadTable(){try{const minConf=parseFloat(val('confFilter')||'0');const rows=await api('/api/usage?'+qs());lastRows=rows.filter(r=>(r.memory.confidence||0)>=minConf);renderRows(lastRows);renderStats(lastRows)}catch(e){document.getElementById('rows').innerHTML='<tr><td colspan="8" class="err">'+esc(e.message)+'</td></tr>'}}

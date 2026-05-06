@@ -121,3 +121,55 @@ type Session struct {
 	EndedAt   *time.Time `json:"ended_at,omitempty"`
 	Summary   string     `json:"summary"`
 }
+
+// SignalKind classifies coordination signals between agents.
+type SignalKind string
+
+const (
+	SignalKindNotice        SignalKind = "notice"         // durable announcement for other agents
+	SignalKindLease         SignalKind = "lease"          // soft lock over a file, topic, or task
+	SignalKindHandoff       SignalKind = "handoff"        // "agent A stopped here; agent B continue there"
+	SignalKindConflict      SignalKind = "conflict"       // reviewable contradiction or competing claim
+	SignalKindReviewRequest SignalKind = "review_request" // request for another agent or human to inspect
+	SignalKindBlocker       SignalKind = "blocker"        // durable explanation of why progress is paused
+)
+
+// SignalStatus tracks the lifecycle of a coordination signal.
+type SignalStatus string
+
+const (
+	SignalStatusActive       SignalStatus = "active"
+	SignalStatusAcknowledged SignalStatus = "acknowledged"
+	SignalStatusExpired      SignalStatus = "expired"
+	SignalStatusResolved     SignalStatus = "resolved"
+	SignalStatusCancelled    SignalStatus = "cancelled"
+)
+
+// AgentSignal is a durable, low-frequency coordination record shared by agents
+// through the same local SQLite database. Signals are not canonical knowledge —
+// they are workflow-oriented interaction state (leases, handoffs, blockers, etc.).
+// Leases must always carry ExpiresAt; no infinite locks.
+type AgentSignal struct {
+	ID          string       `json:"id"`
+	Project     string       `json:"project"`
+	TopicKey    string       `json:"topic_key,omitempty"`
+	Kind        SignalKind   `json:"kind"`
+	Status      SignalStatus `json:"status"`
+	OwnerAgent  string       `json:"owner_agent"`
+	TargetAgent string       `json:"target_agent,omitempty"`
+	Payload     string       `json:"payload,omitempty"`
+	CreatedAt   time.Time    `json:"created_at"`
+	ExpiresAt   *time.Time   `json:"expires_at,omitempty"`
+	ResolvedAt  *time.Time   `json:"resolved_at,omitempty"`
+	MemoryID    *string      `json:"memory_id,omitempty"`
+	SessionID   *string      `json:"session_id,omitempty"`
+}
+
+// SignalQuery filters signal list operations.
+type SignalQuery struct {
+	Project string
+	Kind    SignalKind
+	Status  SignalStatus // empty = active only
+	Agent   string      // owner or target
+	Limit   int
+}

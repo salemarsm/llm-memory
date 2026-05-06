@@ -81,11 +81,19 @@ func (s *Server) routes() {
 		s.mux.HandleFunc("POST "+prefix+"/ingest", s.handleIngest)
 		s.mux.HandleFunc("POST "+prefix+"/chunks/search", s.handleChunkSearch)
 		s.mux.HandleFunc("POST "+prefix+"/documents/{id}/suggest", s.handleDocumentSuggest)
+		s.mux.HandleFunc("POST "+prefix+"/documents/{id}/extract", s.handleDocumentExtract)
 		s.mux.HandleFunc("GET "+prefix+"/browse", s.handleBrowse)
 		s.mux.HandleFunc("GET "+prefix+"/ingest/status", s.handleIngestStatus)
 		s.mux.HandleFunc("POST "+prefix+"/memories/{id}/approve", s.handleApproveMemory)
 		s.mux.HandleFunc("POST "+prefix+"/config", s.handleUpdateConfig)
 		s.mux.HandleFunc("GET "+prefix+"/analytics/supersessions", s.handleSupersessionTimeline)
+		s.mux.HandleFunc("POST "+prefix+"/signals", s.handleCreateSignal)
+		s.mux.HandleFunc("GET "+prefix+"/signals", s.handleListSignals)
+		s.mux.HandleFunc("GET "+prefix+"/signals/{id}", s.handleGetSignal)
+		s.mux.HandleFunc("POST "+prefix+"/signals/{id}/acknowledge", s.handleSignalAcknowledge)
+		s.mux.HandleFunc("POST "+prefix+"/signals/{id}/resolve", s.handleSignalResolve)
+		s.mux.HandleFunc("POST "+prefix+"/signals/{id}/cancel", s.handleSignalCancel)
+		s.mux.HandleFunc("POST "+prefix+"/signals/expire", s.handleExpireSignals)
 	}
 }
 
@@ -339,6 +347,21 @@ func (s *Server) handleDocumentSuggest(w http.ResponseWriter, r *http.Request) {
 	}
 	req.DocumentID = r.PathValue("id")
 	resp, err := s.store.SuggestMemoriesFromDocument(r.Context(), req)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleDocumentExtract(w http.ResponseWriter, r *http.Request) {
+	var req memory.ChunkSuggestRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorStatus(w, http.StatusBadRequest, err)
+		return
+	}
+	req.DocumentID = r.PathValue("id")
+	resp, err := s.store.ExtractMemoriesFromDocument(r.Context(), req)
 	if err != nil {
 		writeError(w, err)
 		return

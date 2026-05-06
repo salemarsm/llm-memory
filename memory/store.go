@@ -16,8 +16,16 @@ import (
 var ErrNotFound = errors.New("memory not found")
 
 type Store struct {
-	db *sql.DB
+	db         *sql.DB
+	embedder   EmbeddingAdapter // nil = lexical-only mode
+	llmAdapter LLMAdapter       // nil = heuristic extraction only
 }
+
+// SetEmbeddingAdapter wires in an optional semantic retrieval adapter.
+func (s *Store) SetEmbeddingAdapter(a EmbeddingAdapter) { s.embedder = a }
+
+// SetLLMAdapter wires in an optional LLM adapter used for intelligent memory extraction.
+func (s *Store) SetLLMAdapter(a LLMAdapter) { s.llmAdapter = a }
 
 func Open(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path)
@@ -148,6 +156,44 @@ func (s *Store) Migrate(ctx context.Context) error {
 		`ALTER TABLE memories ADD COLUMN status TEXT NOT NULL DEFAULT 'active';`,
 		`CREATE INDEX IF NOT EXISTS idx_memories_topic_key ON memories(topic_key) WHERE topic_key IS NOT NULL;`,
 		`CREATE INDEX IF NOT EXISTS idx_memories_status ON memories(status);`,
+		// cross-cutting: persistent inter-agent coordination
+		`CREATE TABLE IF NOT EXISTS agent_signals (
+			id          TEXT PRIMARY KEY,
+			project     TEXT NOT NULL,
+			topic_key   TEXT,
+			kind        TEXT NOT NULL,
+			status      TEXT NOT NULL DEFAULT 'active',
+			owner_agent TEXT NOT NULL,
+			target_agent TEXT,
+			payload     TEXT NOT NULL DEFAULT '',
+			created_at  TEXT NOT NULL,
+			expires_at  TEXT,
+			resolved_at TEXT,
+			memory_id   TEXT REFERENCES memories(id),
+			session_id  TEXT REFERENCES sessions(id)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_signals_project_status ON agent_signals(project, status, created_at DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_signals_kind ON agent_signals(kind, status);`,
+		`CREATE INDEX IF NOT EXISTS idx_signals_expires ON agent_signals(expires_at) WHERE expires_at IS NOT NULL;`,
+		// v0.6: retrieval evaluation harness
+		`CREATE TABLE IF NOT EXISTS retrieval_eval_runs (
+			id         TEXT PRIMARY KEY,
+			label      TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS retrieval_eval_items (
+			id          TEXT PRIMARY KEY,
+			run_id      TEXT NOT NULL REFERENCES retrieval_eval_runs(id) ON DELETE CASCADE,
+			query       TEXT NOT NULL,
+			subject     TEXT NOT NULL DEFAULT '',
+			memory_id   TEXT NOT NULL,
+			rank        INTEGER NOT NULL,
+			relevant    INTEGER NOT NULL CHECK(relevant IN (0,1)),
+			final_score REAL,
+			rank_reason TEXT NOT NULL DEFAULT '',
+			created_at  TEXT NOT NULL
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_eval_items_run ON retrieval_eval_items(run_id, rank);`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {

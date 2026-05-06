@@ -52,6 +52,11 @@ func main() {
 	}
 	defer store.Close()
 
+	if llm := memory.NewLLMAdapter(cfg.LLM.Provider, cfg.LLM.Model, cfg.LLM.APIKeyEnv); llm != nil {
+		store.SetLLMAdapter(llm)
+		slog.Info("LLM adapter enabled", "provider", llm.Provider())
+	}
+
 	_, hasAuth := cfg.Server.BearerToken()
 	slog.Info("ginko starting",
 		"version", version.Version,

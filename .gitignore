@@ -3,3 +3,8 @@
 bin/
 dist/
 .env
+/memmcp
+/memserver
+/memctl
+/ginko
+/ginko-admin

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,15 +18,23 @@ import (
 )
 
 type IngestRequest struct {
-	Path      string `json:"path"`
-	Recursive bool   `json:"recursive"`
+	Path         string `json:"path"`
+	Recursive    bool   `json:"recursive"`
+	// AutoExtract runs LLM-powered memory extraction after ingest when an LLM
+	// adapter is configured. No-op when no LLM adapter is set.
+	AutoExtract  bool   `json:"auto_extract,omitempty"`
+	// Subject is the memory subject for auto-extracted candidates (defaults to doc title).
+	Subject      string `json:"subject,omitempty"`
+	// Scope for auto-extracted memories (defaults to "project").
+	Scope        Scope  `json:"scope,omitempty"`
 }
 
 type IngestResponse struct {
-	Run       IngestionRun `json:"run"`
-	Documents []Document   `json:"documents"`
-	Chunks    []Chunk      `json:"chunks"`
-	Skipped   []string     `json:"skipped"`
+	Run        IngestionRun      `json:"run"`
+	Documents  []Document        `json:"documents"`
+	Chunks     []Chunk           `json:"chunks"`
+	Skipped    []string          `json:"skipped"`
+	Candidates []MemoryCandidate `json:"candidates,omitempty"` // LLM-extracted candidates
 }
 
 type IngestionRun struct {
@@ -106,7 +115,28 @@ func (s *Store) IngestPath(ctx context.Context, req IngestRequest) (IngestRespon
 	if len(resp.Skipped) > 0 {
 		status = "partial"
 	}
-	return finish(status, nil)
+	result, err := finish(status, nil)
+	if err != nil {
+		return result, err
+	}
+
+	// LLM-powered auto-extraction: run after ingest when requested and adapter is set.
+	if req.AutoExtract && s.llmAdapter != nil {
+		for _, doc := range result.Documents {
+			extracted, err := s.ExtractMemoriesFromDocument(ctx, ChunkSuggestRequest{
+				DocumentID: doc.ID,
+				Subject:    req.Subject,
+				Scope:      req.Scope,
+				Limit:      10,
+			})
+			if err != nil {
+				log.Printf("ginko: auto-extract failed for doc %s: %v", doc.ID, err)
+				continue
+			}
+			result.Candidates = append(result.Candidates, extracted.Candidates...)
+		}
+	}
+	return result, nil
 }
 
 func ingestFileList(path string, recursive bool) ([]string, error) {

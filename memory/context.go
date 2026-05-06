@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 )
@@ -30,14 +31,25 @@ type ChunkCitation struct {
 	Path       string `json:"path,omitempty"`
 }
 
+// ContextConflict flags two or more active memories in the same context result
+// that share the same (subject, type) — a structural signal that supersession
+// may be incomplete. Content-level contradiction detection requires an LLM pass.
+type ContextConflict struct {
+	Subject string     `json:"subject"`
+	Type    MemoryType `json:"type"`
+	IDs     []string   `json:"ids"`
+}
+
 type ContextResponse struct {
-	ContextID       string          `json:"context_id"`
-	Context         string          `json:"context"`
-	Items           []Memory        `json:"items"`
-	Citations       []ChunkCitation `json:"citations,omitempty"`
-	EstimatedTokens int             `json:"estimated_tokens"`
-	BudgetTokens    int             `json:"budget_tokens"`
-	Truncated       bool            `json:"truncated"`
+	ContextID       string                     `json:"context_id"`
+	Context         string                     `json:"context"`
+	Items           []Memory                   `json:"items"`
+	Rankings        map[string]RankingMetadata `json:"rankings,omitempty"`
+	Conflicts       []ContextConflict          `json:"conflicts,omitempty"`
+	Citations       []ChunkCitation            `json:"citations,omitempty"`
+	EstimatedTokens int                        `json:"estimated_tokens"`
+	BudgetTokens    int                        `json:"budget_tokens"`
+	Truncated       bool                       `json:"truncated"`
 }
 
 func (s *Store) BuildContext(ctx context.Context, req ContextRequest) (ContextResponse, error) {
@@ -70,7 +82,7 @@ func (s *Store) BuildContext(ctx context.Context, req ContextRequest) (ContextRe
 		limit = 50
 	}
 
-	items, err := s.Search(ctx, Query{
+	ranked, err := s.SearchRanked(ctx, Query{
 		Text:    req.Query,
 		Types:   req.Types,
 		Scopes:  req.Scopes,
@@ -81,15 +93,21 @@ func (s *Store) BuildContext(ctx context.Context, req ContextRequest) (ContextRe
 	if err != nil {
 		return ContextResponse{}, err
 	}
-	if len(items) == 0 && strings.TrimSpace(req.Query) != "" && req.Subject != "" {
+	if len(ranked) == 0 && strings.TrimSpace(req.Query) != "" && req.Subject != "" {
 		// FTS is candidate generation, not truth. Conversational prompts can miss
 		// durable subject memories entirely, so fall back to high-confidence active
-		// subject memories and let budget/type/scope filters keep context compact.
-		items, err = s.Search(ctx, Query{Types: req.Types, Scopes: req.Scopes, Subject: req.Subject, Tags: req.Tags, Limit: limit})
+		// subject memories and let final_score ordering keep context compact.
+		ranked, err = s.SearchRanked(ctx, Query{Types: req.Types, Scopes: req.Scopes, Subject: req.Subject, Tags: req.Tags, Limit: limit})
 		if err != nil {
 			return ContextResponse{}, err
 		}
 	}
+
+	// Re-sort by hybrid final_score DESC. SQL orders by BM25 alone; final_score
+	// additionally weighs confidence, provenance, and recency.
+	sort.Slice(ranked, func(i, j int) bool {
+		return ranked[i].Ranking.FinalScore > ranked[j].Ranking.FinalScore
+	})
 
 	var b strings.Builder
 	used := 0
@@ -101,13 +119,13 @@ func (s *Store) BuildContext(ctx context.Context, req ContextRequest) (ContextRe
 			used += cost
 		}
 	}
-	selected := make([]Memory, 0, len(items))
+	selected := make([]RankedMemory, 0, len(ranked))
 	truncated := false
-	for _, m := range items {
-		if m.Confidence < 0.5 {
+	for _, rm := range ranked {
+		if rm.Memory.Confidence < 0.5 {
 			continue
 		}
-		line := formatContextMemory(m)
+		line := formatContextMemory(rm.Memory)
 		cost := EstimateTokens(line)
 		if used+cost > budget {
 			truncated = true
@@ -116,17 +134,18 @@ func (s *Store) BuildContext(ctx context.Context, req ContextRequest) (ContextRe
 		b.WriteString(line)
 		b.WriteByte('\n')
 		used += cost
-		selected = append(selected, m)
+		selected = append(selected, rm)
 	}
 
 	contextID := newID("ctx")
+	selectedMemories := rankedToMemories(selected)
 	if len(selected) > 0 {
 		payload, _ := json.Marshal(map[string]any{
 			"context_id":       contextID,
 			"query":            req.Query,
 			"project":          project,
 			"subject":          req.Subject,
-			"memory_ids":       memoryIDs(selected),
+			"memory_ids":       memoryIDs(selectedMemories),
 			"estimated_tokens": used,
 			"budget_tokens":    budget,
 			"truncated":        truncated,
@@ -138,7 +157,8 @@ func (s *Store) BuildContext(ctx context.Context, req ContextRequest) (ContextRe
 
 	// Resolve chunk citations for memories sourced from RAG documents.
 	var citations []ChunkCitation
-	for _, m := range selected {
+	for _, rm := range selected {
+		m := rm.Memory
 		if m.Source.Kind == "chunk" && strings.Contains(m.Source.Ref, ":") {
 			parts := strings.SplitN(m.Source.Ref, ":", 2)
 			if len(parts) == 2 {
@@ -151,10 +171,17 @@ func (s *Store) BuildContext(ctx context.Context, req ContextRequest) (ContextRe
 		}
 	}
 
+	rankings := make(map[string]RankingMetadata, len(selected))
+	for _, rm := range selected {
+		rankings[rm.Memory.ID] = rm.Ranking
+	}
+
 	return ContextResponse{
 		ContextID:       contextID,
 		Context:         strings.TrimSpace(b.String()),
-		Items:           selected,
+		Items:           selectedMemories,
+		Rankings:        rankings,
+		Conflicts:       detectContextConflicts(selected),
 		Citations:       citations,
 		EstimatedTokens: used,
 		BudgetTokens:    budget,
@@ -168,6 +195,37 @@ func memoryIDs(items []Memory) []string {
 		ids = append(ids, item.ID)
 	}
 	return ids
+}
+
+func rankedToMemories(ranked []RankedMemory) []Memory {
+	out := make([]Memory, len(ranked))
+	for i, r := range ranked {
+		out[i] = r.Memory
+	}
+	return out
+}
+
+// detectContextConflicts flags structural conflicts: two or more active memories
+// in the context result sharing the same (subject, type). This is a cheap
+// invariant check — topic_key supersession should prevent duplicates, but when
+// it doesn't, the context caller deserves to know.
+func detectContextConflicts(ranked []RankedMemory) []ContextConflict {
+	type key struct {
+		subject string
+		mtype   MemoryType
+	}
+	groups := map[key][]string{}
+	for _, rm := range ranked {
+		k := key{rm.Memory.Subject, rm.Memory.Type}
+		groups[k] = append(groups[k], rm.Memory.ID)
+	}
+	var out []ContextConflict
+	for k, ids := range groups {
+		if len(ids) > 1 {
+			out = append(out, ContextConflict{Subject: k.subject, Type: k.mtype, IDs: ids})
+		}
+	}
+	return out
 }
 
 func formatContextMemory(m Memory) string {

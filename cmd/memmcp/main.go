@@ -68,6 +68,9 @@ func main() {
 				profile = p
 			}
 		}
+		if llm := memory.NewLLMAdapter(cfg.LLM.Provider, cfg.LLM.Model, cfg.LLM.APIKeyEnv); llm != nil {
+			store.SetLLMAdapter(llm)
+		}
 	}
 
 	project := memory.DetectProject("")
@@ -187,6 +190,17 @@ func (s *mcpServer) callTool(call toolCall) (string, error) {
 			return "", err
 		}
 		_ = s.store.AppendEvent(ctx, memory.Event{MemoryID: &result.Memory.ID, Kind: "memory.upserted", Payload: result.Memory.ID, Source: memory.Source{Kind: "mcp", Ref: "memory_remember"}})
+		if len(result.Conflicts) > 0 && s.project != "" {
+			payload := fmt.Sprintf("memory %s conflicts with %d existing %s memories on subject %q", result.Memory.ID, len(result.Conflicts), string(result.Memory.Type), result.Memory.Subject)
+			_, _ = s.store.CreateSignal(ctx, memory.AgentSignal{
+				Project:    s.project,
+				Kind:       memory.SignalKindConflict,
+				Status:     memory.SignalStatusActive,
+				OwnerAgent: "mcp",
+				Payload:    payload,
+				MemoryID:   &result.Memory.ID,
+			})
+		}
 		return pretty(result), nil
 	case "memory_get":
 		var req struct {
@@ -259,6 +273,39 @@ func (s *mcpServer) callTool(call toolCall) (string, error) {
 		}
 		out, err := s.store.SuggestMemories(ctx, req)
 		return pretty(out), err
+	case "signal_create":
+		var sig memory.AgentSignal
+		if err := json.Unmarshal(call.Arguments, &sig); err != nil {
+			return "", err
+		}
+		if sig.Project == "" {
+			sig.Project = s.project
+		}
+		out, err := s.store.CreateSignal(ctx, sig)
+		return pretty(out), err
+	case "signal_list":
+		var q memory.SignalQuery
+		if err := json.Unmarshal(call.Arguments, &q); err != nil {
+			return "", err
+		}
+		if q.Project == "" {
+			q.Project = s.project
+		}
+		out, err := s.store.ListSignals(ctx, q)
+		return pretty(out), err
+	case "signal_update":
+		var req struct {
+			ID     string              `json:"id"`
+			Status memory.SignalStatus `json:"status"`
+		}
+		if err := json.Unmarshal(call.Arguments, &req); err != nil {
+			return "", err
+		}
+		if req.ID == "" {
+			return "", fmt.Errorf("id is required")
+		}
+		out, err := s.store.UpdateSignalStatus(ctx, req.ID, req.Status)
+		return pretty(out), err
 	default:
 		return "", fmt.Errorf("unknown tool %q", call.Name)
 	}
@@ -319,6 +366,51 @@ func tools() []map[string]any {
 			"name":        "memory_timeline",
 			"description": "Show lifecycle/audit events for one memory, including creation, supersession, deletion, and context usage when recorded.",
 			"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"id": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}, "required": []string{"id"}},
+		},
+		{
+			"name":        "signal_create",
+			"description": "Create a coordination signal (notice, lease, handoff, conflict, review_request, blocker) visible to all agents sharing this database. Leases must include expires_at.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"kind":         map[string]string{"type": "string", "description": "notice | lease | handoff | conflict | review_request | blocker"},
+					"owner_agent":  map[string]string{"type": "string", "description": "Name of the agent creating the signal (e.g. claude-code)"},
+					"payload":      map[string]string{"type": "string", "description": "Human-readable description of the signal"},
+					"project":      map[string]string{"type": "string"},
+					"topic_key":    map[string]string{"type": "string"},
+					"target_agent": map[string]string{"type": "string"},
+					"expires_at":   map[string]string{"type": "string", "description": "RFC3339 expiry — required for lease signals"},
+					"memory_id":    map[string]string{"type": "string"},
+					"session_id":   map[string]string{"type": "string"},
+				},
+				"required": []string{"kind", "owner_agent", "payload"},
+			},
+		},
+		{
+			"name":        "signal_list",
+			"description": "List coordination signals for the current project. Defaults to active signals only.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"project": map[string]string{"type": "string"},
+					"kind":    map[string]string{"type": "string"},
+					"status":  map[string]string{"type": "string", "description": "active | acknowledged | expired | resolved | cancelled | * (all)"},
+					"agent":   map[string]string{"type": "string", "description": "Filter by owner or target agent name"},
+					"limit":   map[string]string{"type": "integer"},
+				},
+			},
+		},
+		{
+			"name":        "signal_update",
+			"description": "Transition a signal to a new status: acknowledged, resolved, or cancelled.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":     map[string]string{"type": "string"},
+					"status": map[string]string{"type": "string", "description": "acknowledged | resolved | cancelled"},
+				},
+				"required": []string{"id", "status"},
+			},
 		},
 	}
 }

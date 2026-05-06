@@ -165,3 +165,142 @@ func TestFTSQuery_EmptyInput(t *testing.T) {
 		t.Fatalf("expected empty query, got %q", got)
 	}
 }
+
+func TestBuildContext_ExposesRankingsMap(t *testing.T) {
+	ctx := context.Background()
+	s, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	m, err := s.UpsertMemory(ctx, Memory{
+		Type: TypeDecision, Subject: "ginko", Scope: ScopeProject,
+		Content: "Hybrid ranker combines lexical, confidence, recency, provenance.",
+		Source:  Source{Kind: "test", Ref: "ranking"}, Confidence: 0.9,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := s.BuildContext(ctx, ContextRequest{Query: "hybrid ranker lexical", Subject: "ginko", MaxTokens: 400})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Items) == 0 {
+		t.Fatal("expected at least one item")
+	}
+	if resp.Rankings == nil {
+		t.Fatal("expected Rankings map to be populated")
+	}
+	r, ok := resp.Rankings[m.ID]
+	if !ok {
+		t.Fatalf("expected ranking for memory %s, got keys %v", m.ID, resp.Rankings)
+	}
+	if r.FinalScore <= 0 {
+		t.Fatalf("expected positive final_score, got %v", r)
+	}
+}
+
+func TestBuildContext_DetectsStructuralConflicts(t *testing.T) {
+	ctx := context.Background()
+	s, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	// Two facts with same subject — structurally conflicting.
+	for _, content := range []string{
+		"Signal leases must have expires_at.",
+		"Signal leases are optional and have no expiry requirement.",
+	} {
+		if _, err := s.UpsertMemory(ctx, Memory{
+			Type: TypeFact, Subject: "signals", Scope: ScopeProject,
+			Content: content, Source: Source{Kind: "test", Ref: "conflict"}, Confidence: 0.9,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	resp, err := s.BuildContext(ctx, ContextRequest{Query: "signal lease expiry", Subject: "signals", MaxTokens: 600})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Conflicts) == 0 {
+		t.Fatal("expected at least one structural conflict")
+	}
+	if resp.Conflicts[0].Subject != "signals" {
+		t.Fatalf("unexpected conflict subject: %q", resp.Conflicts[0].Subject)
+	}
+	if len(resp.Conflicts[0].IDs) < 2 {
+		t.Fatalf("expected at least 2 IDs in conflict, got %v", resp.Conflicts[0].IDs)
+	}
+}
+
+func TestRunEval_PrecisionAndNDCG(t *testing.T) {
+	ctx := context.Background()
+	s, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	rel, err := s.UpsertMemory(ctx, Memory{
+		Type: TypeFact, Subject: "eval", Scope: ScopeGlobal,
+		Content: "FTS5 BM25 retrieval ranks exact technical terms first.",
+		Source:  Source{Kind: "test", Ref: "eval"}, Confidence: 0.95,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.UpsertMemory(ctx, Memory{
+		Type: TypeNote, Subject: "eval", Scope: ScopeGlobal,
+		Content: "Unrelated note about something else entirely.",
+		Source:  Source{Kind: "test", Ref: "eval"}, Confidence: 0.6,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fixtures := []EvalFixture{
+		{Label: "exact-match", Query: "BM25 retrieval technical terms", Subject: "eval", RelevantIDs: []string{rel.ID}},
+	}
+	report, err := s.RunEval(ctx, "test-run", fixtures)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Fixtures) != 1 {
+		t.Fatalf("expected 1 fixture result, got %d", len(report.Fixtures))
+	}
+	if report.Fixtures[0].PrecisionAt5 == 0 {
+		t.Fatalf("expected non-zero precision@5 for exact-match fixture, got %v", report.Fixtures[0])
+	}
+}
+
+func TestPrecisionAtK(t *testing.T) {
+	retrieved := []string{"a", "b", "c", "d", "e"}
+	relevant := []string{"b", "d"}
+	if got := precisionAtK(retrieved, relevant, 5); got != 0.4 {
+		t.Fatalf("expected 0.4, got %v", got)
+	}
+	if got := precisionAtK(retrieved, relevant, 2); got != 0.5 {
+		t.Fatalf("expected 0.5, got %v", got)
+	}
+	if got := precisionAtK(nil, relevant, 5); got != 0 {
+		t.Fatalf("expected 0 for empty retrieved, got %v", got)
+	}
+}
+
+func TestNDCGAtK(t *testing.T) {
+	retrieved := []string{"a", "b", "c"}
+	relevant := []string{"a", "b"}
+	// Perfect order: nDCG should be 1.0
+	if got := ndcgAtK(retrieved, relevant, 3); got < 0.99 {
+		t.Fatalf("expected ~1.0 for perfect order, got %v", got)
+	}
+	// No overlap: nDCG should be 0
+	if got := ndcgAtK([]string{"x", "y"}, relevant, 2); got != 0 {
+		t.Fatalf("expected 0 for no overlap, got %v", got)
+	}
+}

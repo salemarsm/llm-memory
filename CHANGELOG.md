@@ -3,6 +3,16 @@
 All notable changes to this project are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [v0.7] — Packaging and ecosystem
+
+### Added
+- `Dockerfile`: multi-stage build (Go builder + distroless/static) exposing port 8787, `/data` volume, and `GINKO_DB` env override.
+- GoReleaser `dockers` + `docker_manifests`: publishes multi-arch image (`linux/amd64`, `linux/arm64`) to `ghcr.io/salemarsm/ginko` on every tag.
+- Release workflow: added Docker Buildx setup and GHCR login; `packages: write` permission.
+- `docs/install.md`: OS-specific installation guide covering Linux (curl, manual), macOS (curl, manual, quarantine fix), Windows (PowerShell), Docker, and build-from-source.
+
+---
+
 ## [v0.6] — Retrieval quality + agent coordination
 
 ### Added

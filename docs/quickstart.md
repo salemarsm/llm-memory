@@ -1,24 +1,26 @@
 # Quickstart
 
-## Install from release
+## Install
 
-Download the latest `ginko` archive for your OS/architecture from GitHub Releases, unpack it, and put the binaries on `PATH`.
+**Linux / macOS** (one command):
 
-The release archive contains:
+```bash
+curl -fsSL https://raw.githubusercontent.com/salemarsm/ginko/main/install.sh | bash
+```
 
-- `ginko`
-- `ginko-admin` (support binary used by `ginko`)
-- `memctl`
-- `memmcp`
-- `memserver`
+**Docker:**
+
+```bash
+docker run -d -p 8787:8787 -v "$HOME/.ginko:/data" ghcr.io/salemarsm/ginko:latest
+```
+
+For Windows, manual downloads, Homebrew, and checksum verification see [install.md](install.md).
 
 Verify:
 
 ```bash
 ginko version
-memmcp -version
-memctl -version
-memserver -version
+ginko doctor
 ```
 
 ## Build from source

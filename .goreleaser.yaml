@@ -75,6 +75,47 @@ archives:
 checksum:
   name_template: checksums.txt
 
+dockers:
+  - id: ginko-amd64
+    goos: linux
+    goarch: amd64
+    ids: [ginko, ginko-admin, memctl, memmcp, memserver]
+    image_templates:
+      - "ghcr.io/salemarsm/ginko:{{ .Tag }}-amd64"
+      - "ghcr.io/salemarsm/ginko:latest-amd64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .Commit }}"
+      - "--label=org.opencontainers.image.source=https://github.com/salemarsm/ginko"
+
+  - id: ginko-arm64
+    goos: linux
+    goarch: arm64
+    ids: [ginko, ginko-admin, memctl, memmcp, memserver]
+    image_templates:
+      - "ghcr.io/salemarsm/ginko:{{ .Tag }}-arm64"
+      - "ghcr.io/salemarsm/ginko:latest-arm64"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .Commit }}"
+      - "--label=org.opencontainers.image.source=https://github.com/salemarsm/ginko"
+
+docker_manifests:
+  - name_template: "ghcr.io/salemarsm/ginko:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/salemarsm/ginko:{{ .Tag }}-amd64"
+      - "ghcr.io/salemarsm/ginko:{{ .Tag }}-arm64"
+  - name_template: "ghcr.io/salemarsm/ginko:latest"
+    image_templates:
+      - "ghcr.io/salemarsm/ginko:latest-amd64"
+      - "ghcr.io/salemarsm/ginko:latest-arm64"
+
 changelog:
   sort: asc
   filters:
